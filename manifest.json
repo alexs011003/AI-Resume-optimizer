@@ -1,0 +1,21 @@
+{
+  "manifest_version": 3,
+  "name": "Resume Optimizer",
+  "version": "1.0.0",
+  "description": "Optimize your resume with AI assistance",
+  "permissions": [
+    "tabs",
+    "sidePanel",
+    "activeTab",
+    "scripting"
+  ],
+  "action": {
+    "default_title": "Open Resume Optimizer"
+  },
+  "side_panel": {
+    "default_path": "sidepanel.html"
+  },
+  "background": {
+    "service_worker": "background.js"
+  }
+}
