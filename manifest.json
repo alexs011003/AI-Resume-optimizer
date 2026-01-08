@@ -7,7 +7,12 @@
     "tabs",
     "sidePanel",
     "activeTab",
-    "scripting"
+    "scripting",
+    "storage"
+  ],
+  "host_permissions": [
+    "https://www.linkedin.com/*",
+    "https://www.indeed.com/*"
   ],
   "action": {
     "default_title": "Open Resume Optimizer"
@@ -17,5 +22,11 @@
   },
   "background": {
     "service_worker": "background.js"
-  }
+  },
+  "web_accessible_resources": [
+    {
+      "resources": ["pdf.worker.min.js", "keywords.json"],
+      "matches": ["<all_urls>"]
+    }
+  ]
 }
