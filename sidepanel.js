@@ -43,6 +43,7 @@ const jobView = document.getElementById('job-view');
 // Current resume content
 let currentResumeText = '';
 let currentJobDescription = '';
+let currentAnalysis = null; // Store current analysis results
 let currentJobMetadata = {
   title: '',
   company: '',
@@ -2658,8 +2659,23 @@ function highlightKeywordsInDescription(matchedKeywords, unmatchedKeywords, desc
   console.log(`✓ Highlighted ${matchedCount} matched and ${unmatchedCount} unmatched keywords`);
 }
 
+// Helper function to get first 100 words from text
+function getFirst100Words(text) {
+  if (!text || text.trim().length === 0) return '';
+  
+  const words = text.trim().split(/\s+/);
+  if (words.length <= 100) {
+    return text.trim();
+  }
+  
+  const first100Words = words.slice(0, 100).join(' ');
+  return first100Words + '...';
+}
+
 // Update UI with analysis results
 function updateUI(analysis) {
+  // Store current analysis for keyword view
+  currentAnalysis = analysis;
   // Clear previous keywords grid at the very beginning to prevent old hardcoded tags
   const keywordsGrid = document.querySelector('.keywords-grid');
   keywordsGrid.innerHTML = '';
@@ -2805,6 +2821,47 @@ function updateUI(analysis) {
     `;
     keywordsGrid.appendChild(tag);
   });
+  
+  // Update Full Job Description section
+  const jobDescriptionPreview = document.getElementById('job-description-preview');
+  const jobDescriptionFull = document.getElementById('job-description-full-text');
+  const jobDescriptionEditable = document.getElementById('job-description-editable');
+  const readMoreBtn = document.getElementById('read-more-btn');
+  const editJobDescBtn = document.getElementById('edit-job-description-btn');
+  
+  if (jobDescriptionPreview && jobDescriptionFull && jobDescriptionEditable && readMoreBtn) {
+    const jobDesc = currentJobDescription || 'No description available';
+    const wordCount = jobDesc.trim().split(/\s+/).length;
+    
+    // Set full text
+    jobDescriptionFull.textContent = jobDesc;
+    
+    // Set editable content
+    jobDescriptionEditable.textContent = jobDesc;
+    
+    // Set preview text (first 100 words)
+    const previewText = getFirst100Words(jobDesc);
+    jobDescriptionPreview.textContent = previewText;
+    
+    // Only update display if not in edit mode
+    if (jobDescriptionEditable.style.display === 'none') {
+      // Show/hide read more button based on word count
+      if (wordCount > 100) {
+        readMoreBtn.style.display = 'block';
+        // Ensure preview is shown and full is hidden initially
+        jobDescriptionPreview.style.display = 'block';
+        jobDescriptionFull.style.display = 'none';
+        readMoreBtn.textContent = 'Read more';
+      } else {
+        readMoreBtn.style.display = 'none';
+        // If text is short, show full text directly
+        jobDescriptionPreview.style.display = 'none';
+        jobDescriptionFull.style.display = 'block';
+      }
+    }
+    
+    console.log('✓ Updated job description section, word count:', wordCount);
+  }
 }
 
 // Perform scan and analysis
@@ -2898,13 +2955,136 @@ async function performScan() {
 
 // Show view helper
 function showView(view) {
+  console.log('👁️ showView called with:', view?.id || 'unknown');
+  
   // Hide all views
-  mainView.style.display = 'none';
-  keywordView.style.display = 'none';
-  jobView.style.display = 'none';
+  if (mainView) mainView.style.display = 'none';
+  if (keywordView) keywordView.style.display = 'none';
+  if (jobView) jobView.style.display = 'none';
   
   // Show selected view
+  if (view) {
   view.style.display = 'flex';
+    console.log('✅ View displayed:', view.id);
+  } else {
+    console.error('❌ View is null or undefined');
+  }
+  
+  // Update tab bar based on which view is shown
+  const tabAnalysis = document.getElementById('tab-analysis');
+  const tabRecommendations = document.getElementById('tab-recommendations');
+  
+  if (view === mainView) {
+    // Show Analysis tab as active
+    if (tabAnalysis) tabAnalysis.classList.add('active');
+    if (tabRecommendations) tabRecommendations.classList.remove('active');
+    console.log('📑 Analysis tab activated');
+  } else if (view === keywordView) {
+    // Show Recommendations tab as active
+    if (tabAnalysis) tabAnalysis.classList.remove('active');
+    if (tabRecommendations) tabRecommendations.classList.add('active');
+    console.log('📑 Recommendations tab activated');
+  }
+}
+
+// Tab switching function
+function switchTab(tabName) {
+  console.log('🔄 Switching tab to:', tabName);
+  console.log('📊 Current analysis:', currentAnalysis ? 'exists' : 'null');
+  console.log('📊 Unmatched keywords:', currentAnalysis?.unmatchedKeywords?.length || 0);
+  
+  const tabAnalysis = document.getElementById('tab-analysis');
+  const tabRecommendations = document.getElementById('tab-recommendations');
+  
+  // Update tab buttons
+  if (tabName === 'analysis') {
+    if (tabAnalysis) tabAnalysis.classList.add('active');
+    if (tabRecommendations) tabRecommendations.classList.remove('active');
+    console.log('📱 Showing main view (Analysis)');
+    showView(mainView);
+  } else if (tabName === 'recommendations') {
+    if (tabAnalysis) tabAnalysis.classList.remove('active');
+    if (tabRecommendations) tabRecommendations.classList.add('active');
+    
+    // Always show the keyword view first
+    showView(keywordView);
+    
+    // Always show the first missing keyword's suggestion view
+    if (currentAnalysis && currentAnalysis.unmatchedKeywords && currentAnalysis.unmatchedKeywords.length > 0) {
+      console.log('📋 Opening first missing keyword:', currentAnalysis.unmatchedKeywords[0]);
+      // Open the first missing keyword's view (this will populate the grid and show suggestions)
+      try {
+        openKeywordView(currentAnalysis.unmatchedKeywords[0]);
+      } catch (error) {
+        console.error('❌ Error opening keyword view:', error);
+        // Fallback: just populate the grid without opening a specific keyword
+        populateMissingKeywordsGrid(null);
+      }
+    } else {
+      console.log('⚠️ No missing keywords found or no analysis data');
+      // If no missing keywords, still try to populate the grid if currentAnalysis exists
+      if (currentAnalysis && currentAnalysis.unmatchedKeywords) {
+        populateMissingKeywordsGrid(null);
+      }
+    }
+  }
+}
+
+// Helper function to populate missing keywords grid
+function populateMissingKeywordsGrid(selectedKeyword) {
+  const missingKeywordsGrid = document.getElementById('missing-keywords-grid');
+  if (!missingKeywordsGrid || !currentAnalysis || !currentAnalysis.unmatchedKeywords) {
+    console.log('⚠️ Cannot populate missing keywords grid - missing elements or data');
+    return;
+  }
+  
+  console.log('📝 Populating missing keywords grid with', currentAnalysis.unmatchedKeywords.length, 'keywords');
+  missingKeywordsGrid.innerHTML = '';
+  
+  currentAnalysis.unmatchedKeywords.forEach(missingKeyword => {
+    const tag = document.createElement('span');
+    tag.className = 'keyword-tag unmatched';
+    tag.textContent = missingKeyword;
+    tag.setAttribute('data-keyword', missingKeyword);
+    
+    // Highlight the selected keyword
+    if (selectedKeyword && missingKeyword === selectedKeyword) {
+      tag.style.border = '2px solid #3b82f6';
+      tag.style.backgroundColor = '#dbeafe';
+    }
+    
+    // Add click handler to switch to this keyword's suggestions
+    tag.addEventListener('click', () => {
+      // Remove highlight from all tags
+      missingKeywordsGrid.querySelectorAll('.keyword-tag').forEach(t => {
+        t.style.border = '';
+        t.style.backgroundColor = '';
+      });
+      
+      // Highlight clicked tag
+      tag.style.border = '2px solid #3b82f6';
+      tag.style.backgroundColor = '#dbeafe';
+      
+      // Update suggestions for this keyword
+      const keywordSuggestion = keywordSuggestions[missingKeyword] || {
+        skill: `Add ${missingKeyword} to your technical skills section`,
+        summary: `Consider mentioning ${missingKeyword} in your professional summary`,
+        original: 'Your current resume text'
+      };
+      
+      const skillSuggestionEl = document.getElementById('skill-suggestion');
+      const summarySuggestionEl = document.getElementById('summary-suggestion');
+      const originalTextEl = document.getElementById('original-text');
+      
+      if (skillSuggestionEl) skillSuggestionEl.textContent = keywordSuggestion.skill;
+      if (summarySuggestionEl) summarySuggestionEl.textContent = keywordSuggestion.summary;
+      if (originalTextEl) originalTextEl.textContent = keywordSuggestion.original;
+    });
+    
+    missingKeywordsGrid.appendChild(tag);
+  });
+  
+  console.log('✅ Missing keywords grid populated');
 }
 
 // Close button handler
@@ -2989,28 +3169,48 @@ function attachKeywordHandlers() {
 
 // Open keyword detail view
 function openKeywordView(keyword) {
+  console.log('🔍 Opening keyword view for:', keyword);
+  
+  if (!currentAnalysis || !currentAnalysis.unmatchedKeywords || currentAnalysis.unmatchedKeywords.length === 0) {
+    console.warn('⚠️ No analysis data available, cannot open keyword view');
+    return;
+  }
+  
   const suggestions = keywordSuggestions[keyword] || {
     skill: `Add ${keyword} to your technical skills section`,
     summary: `Consider mentioning ${keyword} in your professional summary`,
     original: 'Your current resume text'
   };
 
-  // Update selected keyword tag
-  document.getElementById('selected-keyword-tag').textContent = keyword;
+  // Populate all missing keywords in the MISSING KEYWORD section using helper function
+  populateMissingKeywordsGrid(keyword);
 
-  // Update suggestions
-  document.getElementById('skill-suggestion').textContent = suggestions.skill;
-  document.getElementById('summary-suggestion').textContent = suggestions.summary;
-  document.getElementById('original-text').textContent = suggestions.original;
+  // Update suggestions for the initial keyword
+  const skillSuggestionEl = document.getElementById('skill-suggestion');
+  const summarySuggestionEl = document.getElementById('summary-suggestion');
+  const originalTextEl = document.getElementById('original-text');
+  
+  if (skillSuggestionEl) skillSuggestionEl.textContent = suggestions.skill;
+  if (summarySuggestionEl) summarySuggestionEl.textContent = suggestions.summary;
+  if (originalTextEl) originalTextEl.textContent = suggestions.original;
 
-  // Show keyword view
+  // Show keyword view and update tab
+  console.log('📱 Showing keyword view');
   showView(keywordView);
+  
+  console.log('✅ Keyword view opened for:', keyword);
 }
 
-// Back button from keyword view
-document.getElementById('back-from-keyword')?.addEventListener('click', () => {
-  showView(mainView);
+// Tab button handlers
+document.getElementById('tab-analysis')?.addEventListener('click', () => {
+  switchTab('analysis');
 });
+
+document.getElementById('tab-recommendations')?.addEventListener('click', () => {
+  switchTab('recommendations');
+});
+
+// Back button from keyword view removed - tab bar handles navigation now
 
 // Edit job button handler
 document.getElementById('edit-job-btn')?.addEventListener('click', () => {
@@ -3021,6 +3221,104 @@ document.getElementById('edit-job-btn')?.addEventListener('click', () => {
 document.getElementById('back-from-job')?.addEventListener('click', () => {
   showView(mainView);
 });
+
+// Read more/less button handler for job description
+const readMoreBtn = document.getElementById('read-more-btn');
+if (readMoreBtn) {
+  readMoreBtn.addEventListener('click', () => {
+    const preview = document.getElementById('job-description-preview');
+    const full = document.getElementById('job-description-full-text');
+    const editable = document.getElementById('job-description-editable');
+    
+    // Only toggle if not in edit mode
+    if (editable && editable.style.display === 'none' && preview && full) {
+      const isExpanded = full.style.display !== 'none';
+      
+      if (isExpanded) {
+        // Collapse: show preview, hide full
+        preview.style.display = 'block';
+        full.style.display = 'none';
+        readMoreBtn.textContent = 'Read more';
+      } else {
+        // Expand: hide preview, show full
+        preview.style.display = 'none';
+        full.style.display = 'block';
+        readMoreBtn.textContent = 'Read less';
+      }
+    }
+  });
+}
+
+// Edit job description button handler
+const editJobDescBtn = document.getElementById('edit-job-description-btn');
+if (editJobDescBtn) {
+  editJobDescBtn.addEventListener('click', () => {
+    const preview = document.getElementById('job-description-preview');
+    const full = document.getElementById('job-description-full-text');
+    const editable = document.getElementById('job-description-editable');
+    const readMoreBtn = document.getElementById('read-more-btn');
+    
+    if (preview && full && editable) {
+      const isEditMode = editable.style.display !== 'none';
+      
+      if (isEditMode) {
+        // Save mode: exit edit mode
+        const editedText = editable.textContent || editable.innerText || '';
+        currentJobDescription = editedText.trim();
+        
+        // Update preview and full text with edited content
+        const wordCount = currentJobDescription.trim().split(/\s+/).length;
+        preview.textContent = getFirst100Words(currentJobDescription);
+        full.textContent = currentJobDescription;
+        
+        // Hide editable, show preview/full based on length
+        editable.style.display = 'none';
+        if (wordCount > 100) {
+          preview.style.display = 'block';
+          full.style.display = 'none';
+          readMoreBtn.style.display = 'block';
+          readMoreBtn.textContent = 'Read more';
+        } else {
+          preview.style.display = 'none';
+          full.style.display = 'block';
+          readMoreBtn.style.display = 'none';
+        }
+        
+        editJobDescBtn.textContent = 'Edit';
+        
+        // Re-analyze with edited description
+        if (currentResumeText && currentResumeText.trim() !== '') {
+          console.log('📝 Job description edited - re-analyzing...');
+          const analysis = analyzeResume(currentResumeText, currentJobDescription);
+          updateUI(analysis);
+        }
+      } else {
+        // Edit mode: enter edit mode
+        editable.textContent = currentJobDescription || '';
+        
+        // Hide preview and full, show editable
+        preview.style.display = 'none';
+        full.style.display = 'none';
+        editable.style.display = 'block';
+        readMoreBtn.style.display = 'none';
+        
+        editJobDescBtn.textContent = 'Save';
+        
+        // Focus on editable element
+        setTimeout(() => {
+          editable.focus();
+          // Move cursor to end
+          const range = document.createRange();
+          const selection = window.getSelection();
+          range.selectNodeContents(editable);
+          range.collapse(false);
+          selection.removeAllRanges();
+          selection.addRange(range);
+        }, 0);
+      }
+    }
+  });
+}
 
 // STEP 3: Add listener for manual edits to job description
 let editTimeout = null;

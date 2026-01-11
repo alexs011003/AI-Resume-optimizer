@@ -30,6 +30,12 @@
     </div>
   </header>
   
+  <!-- Tab Bar -->
+  <div class="tab-bar">
+    <button class="tab-btn active" id="tab-analysis" data-tab="analysis">Analysis</button>
+    <button class="tab-btn" id="tab-recommendations" data-tab="recommendations">AI Suggestions</button>
+  </div>
+  
   <!-- Main View -->
   <div id="main-view" class="view">
     <main>
@@ -186,8 +192,22 @@
         </div>
       </section>
 
+      <!-- Full Job Description Section -->
+      <section class="job-description-section">
+        <div class="section-header">
+          <h2>Detected Job description</h2>
+          <button class="edit-btn" id="edit-job-description-btn">Edit</button>
+        </div>
+        <div class="job-description-content">
+          <p class="job-description-text" id="job-description-preview"></p>
+          <p class="job-description-text-full" id="job-description-full-text" style="display: none;"></p>
+          <div class="job-description-editable" id="job-description-editable" style="display: none;" contenteditable="true"></div>
+          <button class="read-more-btn" id="read-more-btn" style="display: none;">Read more</button>
+        </div>
+      </section>
+
       <!-- Detected Job Section -->
-      <section class="job-section">
+      <section class="job-section" style="display: none;">
         <div class="section-header">
           <h2>Detected Job</h2>
           <button class="edit-btn" id="edit-job-btn">Edit</button>
@@ -216,21 +236,12 @@
 
   <!-- Keyword Detail View -->
   <div id="keyword-view" class="view" style="display: none;">
-    <div class="keyword-header">
-      <button class="back-btn" id="back-from-keyword">
-        <svg width="20" height="20" viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg">
-          <path d="M11.6667 15L6.66667 10L11.6667 5" stroke="#4A5565" stroke-width="1.66667" stroke-linecap="round" stroke-linejoin="round"/>
-          <path d="M15.8333 10H4.16667" stroke="#4A5565" stroke-width="1.66667" stroke-linecap="round" stroke-linejoin="round"/>
-        </svg>
-      </button>
-      <h2 class="keyword-view-title">Recommendations</h2>
-    </div>
     <div class="keyword-content">
       <!-- Part 1: Missing Keyword -->
       <div class="keyword-section">
         <h4 class="section-label">MISSING KEYWORD</h4>
-        <div class="keyword-tag-display">
-          <span class="keyword-tag unmatched" id="selected-keyword-tag">Python</span>
+        <div class="keyword-tag-display" id="missing-keywords-grid">
+          <!-- All missing keywords will be populated here -->
         </div>
       </div>
 

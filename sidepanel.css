@@ -40,6 +40,49 @@ header {
   align-items: center;
 }
 
+/* Tab Bar Styles */
+.tab-bar {
+  width: 100%;
+  background-color: #ffffff;
+  border-bottom: 1px solid #e5e7eb;
+  display: flex;
+  gap: 0;
+  padding: 0;
+  flex-shrink: 0;
+}
+
+.tab-btn {
+  background: none;
+  border: none;
+  padding: 12px 20px;
+  font-family: 'Inter', sans-serif;
+  font-size: 14px;
+  font-weight: 500;
+  color: #6b7280;
+  cursor: pointer;
+  border-bottom: 2px solid transparent;
+  transition: all 0.2s;
+  position: relative;
+  flex: 1;
+  width: 50%;
+  text-align: center;
+}
+
+.tab-btn:hover {
+  color: #1a1a1a;
+  background-color: #f9fafb;
+}
+
+.tab-btn.active {
+  color: #2563eb;
+  border-bottom-color: #2563eb;
+  background-color: transparent;
+}
+
+.tab-btn.active:hover {
+  background-color: transparent;
+}
+
 .header-content {
   display: flex;
   justify-content: space-between;
@@ -317,6 +360,73 @@ main {
 }
 
 /* Detected Job Section */
+/* Full Job Description Section */
+.job-description-section {
+  background-color: #ffffff;
+  border: 1px solid #e5e7eb;
+  border-radius: 8px;
+  padding: 16px;
+  width: 100%;
+}
+
+.job-description-content {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.job-description-text,
+.job-description-text-full {
+  font-family: 'Inter', sans-serif;
+  font-size: 13px;
+  font-weight: 400;
+  color: #1a1a1a;
+  line-height: 1.6;
+  margin: 0;
+  white-space: pre-wrap;
+  word-wrap: break-word;
+}
+
+.job-description-editable {
+  font-family: 'Inter', sans-serif;
+  font-size: 13px;
+  font-weight: 400;
+  color: #1a1a1a;
+  line-height: 1.6;
+  margin: 0;
+  white-space: pre-wrap;
+  word-wrap: break-word;
+  min-height: 200px;
+  padding: 12px;
+  border: 1px solid #d1d5db;
+  border-radius: 6px;
+  background-color: #ffffff;
+  outline: none;
+}
+
+.job-description-editable:focus {
+  border-color: #3b82f6;
+  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
+}
+
+.read-more-btn {
+  background: none;
+  border: none;
+  color: #3b82f6;
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  padding: 0;
+  text-align: left;
+  transition: opacity 0.2s;
+  align-self: flex-start;
+}
+
+.read-more-btn:hover {
+  opacity: 0.8;
+  text-decoration: underline;
+}
+
 .job-section {
   background-color: #ffffff;
   border: 1px solid #e5e7eb;
@@ -565,11 +675,20 @@ body::-webkit-scrollbar-thumb:hover {
 }
 
 .keyword-tag-display {
-  display: inline-flex;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
 }
 
 .keyword-tag-display .keyword-tag {
   margin: 0;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.keyword-tag-display .keyword-tag:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
 }
 
 .divider {
