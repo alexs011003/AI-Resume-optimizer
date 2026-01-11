@@ -727,3 +727,18 @@ body::-webkit-scrollbar-thumb:hover {
   margin: 0;
   white-space: pre-line;
 }
+
+/* Keyword highlighting styles - Reference: Jobalytics highlightKeywords.js */
+.keyword-matched {
+  border-bottom: 3px solid #00c950; /* Green */
+  background-color: transparent;
+  padding: 0;
+  margin: 0;
+}
+
+.keyword-unmatched {
+  border-bottom: 3px solid #fcb44f; /* Yellow */
+  background-color: transparent;
+  padding: 0;
+  margin: 0;
+}

@@ -47,13 +47,197 @@ let currentJobMetadata = {
   title: '',
   company: '',
   date: '',
-  source: ''
+  source: '',
+  domain: 'general' // Added domain field
 };
 
 // Keywords loaded from keywords.json
 let loadedKeywords = [];
 let loadedTechKeywords = [];
 let loadedSoftKeywords = [];
+let loadedSweKeywords = [];
+let loadedPmMarketingKeywords = [];
+let loadedDesignKeywords = [];
+
+// Domain detection function
+// Reference: Jobalytics util.js fetchDomain function
+function detectJobDomain(jobTitle, jobDescription, url) {
+  // Combine all text for analysis
+  const combinedText = `${jobTitle || ''} ${jobDescription || ''} ${url || ''}`.toLowerCase();
+  
+  // SWE detection patterns (must NOT match "Product Design" or "Design Engineer" roles)
+  const swePatterns = [
+    /software\s+engineer/gi,
+    /backend\s+engineer/gi,
+    /frontend\s+engineer/gi,
+    /full.?stack\s+engineer/gi,
+    /machine\s+learning\s+engineer/gi,
+    /ml\s+engineer/gi,
+    /data\s+engineer/gi,
+    /devops\s+engineer/gi,
+    /sre\s+engineer/gi,
+    /solutions\s+architect/gi,
+    /developer/gi,
+    /programmer/gi,
+    /coder/gi,
+    /ai\s+engineer/gi,
+    /tech( analyst)?/gi
+  ];
+  
+  // PM/Marketing detection patterns
+  // IMPORTANT: "product" alone should NOT match - only "product manager" or "product management"
+  // This avoids false positives with "Product Design" roles
+  const pmMarketingPatterns = [
+    /product\s+manager/gi,  // Must be "product manager", not just "product"
+    /product\s+management/gi,  // Must be "product management"
+    /marketing/gi,
+    /marketer/gi,
+    /advertising/gi,
+    /advertiser/gi,
+    /copywriting/gi,
+    /copywriter/gi,
+    /social\s+media/gi,
+    /brand/gi,
+    /ambassador/gi,
+    /cmo/gi,
+    /go.?to.?market/gi,
+    /gtm/gi,
+    /roadmap/gi,
+    /product\s+strategy/gi  // Must be "product strategy", not just "product"
+  ];
+  
+  // Design detection patterns (MUST be checked before SWE to avoid false positives)
+  // Priority: Check for "design" keyword first, then specific design roles
+  const designPatterns = [
+    /product\s+design/gi,  // "Product Design" - must come before generic "product" patterns
+    /product\s+designer/gi,
+    /design\s+intern/gi,   // "Design Intern" pattern
+    /ux\s+designer/gi,
+    /ui\s+designer/gi,
+    /user\s+experience\s+designer/gi,
+    /user\s+interface\s+designer/gi,
+    /ux\s+researcher/gi,
+    /user\s+researcher/gi,
+    /design\s+researcher/gi,
+    /interaction\s+designer/gi,
+    /visual\s+designer/gi,
+    /design\s+system/gi,
+    /figma/gi,
+    /prototyping/gi,
+    /wireframing/gi,
+    /user\s+research/gi,
+    /usability\s+testing/gi,
+    /information\s+architecture/gi,
+    /user\s+flows/gi,
+    /journey\s+mapping/gi,
+    /design\s+thinking/gi,
+    /\bdesigner\b/gi  // Generic "designer" keyword (but check after specific patterns)
+  ];
+  
+  // Hybrid role detection patterns (Design + Engineering)
+  // These roles require both design and engineering skills
+  const hybridPatterns = [
+    /design\s+(technologist|engineer|developer)/gi,
+    /(technologist|engineer|developer)\s+.*design/gi,
+    /frontend\s+designer/gi,
+    /designer.*frontend/gi,
+    /ui\s+engineer/gi,
+    /ux\s+engineer/gi,
+    /creative\s+technologist/gi,
+    /design\s+engineer/gi,
+    /design\s+developer/gi
+  ];
+  
+  // Count matches for each domain
+  let sweScore = 0;
+  let pmMarketingScore = 0;
+  let designScore = 0;
+  let isHybrid = false;
+  
+  // #region agent log
+  fetch('http://127.0.0.1:7242/ingest/3b595b84-3d7c-4c26-80fb-96782efb256f',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'sidepanel.js:133',message:'Domain detection start',data:{jobTitle,combinedTextPreview:combinedText.substring(0,200)},timestamp:Date.now(),sessionId:'debug-session',runId:'run2',hypothesisId:'K'})}).catch(()=>{});
+  // #endregion
+  
+  // Check for hybrid roles first
+  hybridPatterns.forEach(pattern => {
+    if (pattern.test(combinedText)) {
+      isHybrid = true;
+    }
+  });
+  
+  // Count SWE patterns
+  swePatterns.forEach(pattern => {
+    const matches = combinedText.match(pattern);
+    if (matches) sweScore += matches.length;
+  });
+  
+  // Check for generic "engineer" but exclude design-related contexts
+  // This must be done AFTER design patterns are checked
+  const genericEngineerPattern = /\bengineer(ing)?\b/gi;
+  const engineerMatches = combinedText.match(genericEngineerPattern);
+  if (engineerMatches) {
+    // Only count if NOT in design context
+    const designContextPattern = /(product\s+)?design\s+engineer|ux\s+engineer|ui\s+engineer|designer|product\s+design/gi;
+    const hasDesignContext = designContextPattern.test(combinedText);
+    if (!hasDesignContext) {
+      sweScore += engineerMatches.length;
+    }
+    // #region agent log
+    fetch('http://127.0.0.1:7242/ingest/3b595b84-3d7c-4c26-80fb-96782efb256f',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'sidepanel.js:148',message:'Engineer pattern check',data:{engineerMatchesCount:engineerMatches.length,hasDesignContext,addedToSwe:!hasDesignContext},timestamp:Date.now(),sessionId:'debug-session',runId:'run2',hypothesisId:'L'})}).catch(()=>{});
+    // #endregion
+  }
+  
+  pmMarketingPatterns.forEach(pattern => {
+    const matches = combinedText.match(pattern);
+    if (matches) pmMarketingScore += matches.length;
+  });
+  
+  designPatterns.forEach(pattern => {
+    const matches = combinedText.match(pattern);
+    if (matches) designScore += matches.length;
+  });
+  
+  // #region agent log
+  fetch('http://127.0.0.1:7242/ingest/3b595b84-3d7c-4c26-80fb-96782efb256f',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'sidepanel.js:165',message:'Domain scores calculated',data:{sweScore,pmMarketingScore,designScore},timestamp:Date.now(),sessionId:'debug-session',runId:'run2',hypothesisId:'M'})}).catch(()=>{});
+  // #endregion
+  
+  // Determine domain based on highest score
+  // Hybrid roles have HIGHEST priority (most specific)
+  // Design has HIGH priority if score > 0 (more specific roles)
+  // Check design first to avoid false positives from "Product" matching PM patterns
+  let finalDomain = 'general';
+  
+  // Check for hybrid roles first (Design + Engineering)
+  if (isHybrid) {
+    finalDomain = 'hybrid_design_swe';
+    console.log('🔍 Detected hybrid role (Design + Engineering)');
+  }
+  // If not hybrid, proceed with normal domain detection
+  else if (designScore > 0) {
+    // Design wins if it has any matches, or if it ties with others
+    if (designScore >= sweScore && designScore >= pmMarketingScore) {
+      finalDomain = 'design';
+    }
+    // If design ties with SWE but job title contains "design", prefer design
+    else if (designScore === sweScore && /design/i.test(jobTitle)) {
+      finalDomain = 'design';
+    }
+  }
+  
+  if (finalDomain === 'general') {
+    if (sweScore > 0 && sweScore > pmMarketingScore) {
+      finalDomain = 'swe';
+    } else if (pmMarketingScore > 0) {
+      finalDomain = 'pm_marketing';
+    }
+  }
+  
+  // #region agent log
+  fetch('http://127.0.0.1:7242/ingest/3b595b84-3d7c-4c26-80fb-96782efb256f',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'sidepanel.js:185',message:'Domain decision',data:{finalDomain,jobTitleContainsDesign:/design/i.test(jobTitle)},timestamp:Date.now(),sessionId:'debug-session',runId:'run2',hypothesisId:'N'})}).catch(()=>{});
+  // #endregion
+  
+  return finalDomain;
+}
 
 // Keyword suggestions data
 const keywordSuggestions = {
@@ -107,19 +291,44 @@ async function fetchKeywords() {
     
     if (!response.ok) {
       console.error('Failed to fetch keywords.json:', response.status);
-      return { allKeywords: [], techKeywords: [], softKeywords: [] };
+      return { 
+        allKeywords: [], 
+        techKeywords: [], 
+        softKeywords: [],
+        sweKeywords: [],
+        pmMarketingKeywords: [],
+        designKeywords: []
+      };
     }
     
     const data = await response.json();
     
-    // Store technical and soft keywords separately
+    // Store all keyword lists
     const techKeywords = data.techKeywords || [];
     const softKeywords = data.softKeywords || [];
+    const sweKeywords = data.sweKeywords || [];
+    const pmMarketingKeywords = data.pmMarketingKeywords || [];
+    const designKeywords = data.designKeywords || [];
+    
+    // All keywords combined (for general/fallback use)
     const allKeywords = [...techKeywords, ...softKeywords];
     
-    console.log('Keywords loaded successfully:', techKeywords.length, 'technical +', softKeywords.length, 'soft =', allKeywords.length, 'total');
+    console.log('Keywords loaded successfully:');
+    console.log('  - Tech:', techKeywords.length);
+    console.log('  - Soft:', softKeywords.length);
+    console.log('  - SWE:', sweKeywords.length);
+    console.log('  - PM/Marketing:', pmMarketingKeywords.length);
+    console.log('  - Design:', designKeywords.length);
+    console.log('  - Total (tech+soft):', allKeywords.length);
     
-    return { allKeywords, techKeywords, softKeywords };
+    return { 
+      allKeywords, 
+      techKeywords, 
+      softKeywords,
+      sweKeywords,
+      pmMarketingKeywords,
+      designKeywords
+    };
   } catch (error) {
     console.error('Error loading keywords:', error);
     // Return fallback keywords if loading fails
@@ -133,7 +342,10 @@ async function fetchKeywords() {
     return {
       allKeywords: [...fallbackTech, ...fallbackSoft],
       techKeywords: fallbackTech,
-      softKeywords: fallbackSoft
+      softKeywords: fallbackSoft,
+      sweKeywords: [],
+      pmMarketingKeywords: [],
+      designKeywords: []
     };
   }
 }
@@ -143,15 +355,151 @@ function isSoftSkill(keyword) {
   return loadedSoftKeywords.some(sk => sk.toLowerCase() === keyword.toLowerCase());
 }
 
-// Extract keywords from text (case-insensitive with fuzzy matching)
-function extractKeywords(text) {
+// Synonym mapping for keyword normalization
+// Reference: Jobalytics synonyms_list.js
+const keywordSynonyms = [
+  ["react", "reactjs", "react.js", "react js"],
+  ["node.js", "nodejs", "node"],
+  ["vue", "vuejs", "vue.js"],
+  ["angular", "angularjs", "angular.js"],
+  ["javascript", "js"],
+  ["html", "html5"],
+  ["css", "css3"],
+  ["aws", "amazon web services"],
+  ["gcp", "google cloud platform"],
+  ["postgres", "postgresql", "postgressql"],
+  ["machine learning", "ml"],
+  ["ai", "artificial intelligence"],
+  ["ci/cd", "continuous integration", "continuous deployment"],
+  ["design system", "design systems"],
+  ["wireframe", "wireframes", "wireframing"],
+  ["prototype", "prototypes", "prototyping"],
+  ["user flow", "user flows"],
+  ["persona", "personas"],
+  ["grid system", "grid systems"],
+  ["ux", "user experience"],
+  ["ui", "user interface"],
+  ["ixd", "interaction design"],
+  ["vui", "voice ui"],
+  ["hcd", "human-centered design"],
+  ["ia", "information architecture"]
+];
+
+// Prefix consolidation for keyword normalization
+// Reference: Jobalytics util.js correct_for_prefixes
+const keywordPrefixes = [
+  "design",      // design, designing, designer, designs
+  "research",    // research, researching, researcher
+  "prototype",   // prototype, prototyping, prototyped
+  "user",        // user, users, user-centered
+  "test",        // test, testing, tested, tests
+  "engineer",    // engineer, engineering, engineered
+  "communicat",   // communicate, communication, communicating
+  "strateg"      // strategy, strategic, strategize
+];
+
+// Normalize keywords for comparison only (always uses canonical form)
+// This ensures "HCD" and "human-centered design" both normalize to "hcd" for matching
+// Reference: Jobalytics util.js correct_for_synonyms and correct_for_prefixes
+function normalizeForComparison(keywords) {
+  if (!keywords || keywords.length === 0) return [];
+  
+  // Step 1: Convert to lowercase and remove duplicates
+  let normalized = [...new Set(keywords.map(kw => kw.toLowerCase()))];
+  
+  // Step 2: Apply synonym mapping - always use canonical (first) form for comparison
+  normalized = normalized.map(kw => {
+    for (const synonymGroup of keywordSynonyms) {
+      if (synonymGroup.includes(kw)) {
+        // Always return canonical (first) form for comparison
+        // This ensures "hcd" and "human-centered design" both become "hcd"
+        return synonymGroup[0];
+      }
+    }
+    return kw;
+  });
+  
+  // Step 3: Apply prefix consolidation
+  normalized = normalized.map(kw => {
+    for (const prefix of keywordPrefixes) {
+      if (kw.startsWith(prefix) && kw.length > prefix.length) {
+        // Check if there's a canonical form with this prefix
+        const canonical = normalized.find(n => n === prefix || n.startsWith(prefix + ' '));
+        if (canonical) {
+          return canonical;
+        }
+      }
+    }
+    return kw;
+  });
+  
+  // Step 4: Remove duplicates again after normalization
+  return [...new Set(normalized)];
+}
+
+// Legacy function - kept for backward compatibility if used elsewhere
+// Normalize keywords using synonyms and prefixes
+function normalizeKeywords(keywords) {
+  return normalizeForComparison(keywords);
+}
+
+// Extract keywords with domain-specific lists and normalization
+// Reference: Jobalytics util.js getKeywordsFromTextWithSuffixes
+function extractKeywords(text, domain = 'general') {
   if (!text) return [];
   const foundKeywords = [];
   const foundKeywordsLower = new Set();
   
-  // Use loaded keywords or fallback to empty array
-  const keywordsToCheck = loadedKeywords.length > 0 ? loadedKeywords : [];
+  // Select keyword list based on domain
+  let keywordsToCheck = [];
+  switch(domain) {
+    case 'swe':
+      keywordsToCheck = loadedSweKeywords.length > 0 ? loadedSweKeywords : loadedKeywords;
+      break;
+    case 'pm_marketing':
+      keywordsToCheck = loadedPmMarketingKeywords.length > 0 ? loadedPmMarketingKeywords : loadedKeywords;
+      break;
+    case 'design':
+      // For design roles, also include frontend-relevant SWE keywords
+      // (since many design roles require frontend knowledge)
+      keywordsToCheck = [
+        ...(loadedDesignKeywords.length > 0 ? loadedDesignKeywords : []),
+        // Add frontend-relevant SWE keywords
+        ...(loadedSweKeywords.filter(kw => {
+          const kwLower = kw.toLowerCase();
+          return /^(html|css|javascript|js|react|typescript|frontend|vue|angular|sass|less|tailwind|bootstrap|webpack)$/i.test(kwLower) ||
+                 kwLower.includes('frontend') || kwLower.includes('front-end');
+        }))
+      ];
+      keywordsToCheck = [...new Set(keywordsToCheck)]; // Remove duplicates
+      break;
+    case 'hybrid_design_swe':
+      // Hybrid roles: Combine design + SWE keywords
+      keywordsToCheck = [
+        ...(loadedDesignKeywords.length > 0 ? loadedDesignKeywords : []),
+        ...(loadedSweKeywords.length > 0 ? loadedSweKeywords : [])
+      ];
+      keywordsToCheck = [...new Set(keywordsToCheck)]; // Remove duplicates
+      break;
+    default:
+      keywordsToCheck = loadedKeywords.length > 0 ? loadedKeywords : [];
+  }
   
+  // ALWAYS add soft keywords (they're relevant for all domains)
+  // This ensures soft skills like "Communication", "Leadership", "Problem Solving" 
+  // are checked regardless of whether the job is SWE, PM/Marketing, or Design
+  keywordsToCheck = [...keywordsToCheck, ...loadedSoftKeywords];
+  
+  // Remove duplicates (in case soft keywords are already in domain-specific list)
+  keywordsToCheck = [...new Set(keywordsToCheck)];
+  
+  // Suffix variations to check (reference: util.js lines 254-275)
+  const suffixes = ["ing", "d", "ed", "s"];
+  
+  // Sort keywords by length (longest first) to match multi-word keywords first
+  keywordsToCheck = keywordsToCheck.sort((a, b) => b.length - a.length);
+  
+  // Extract base keywords
   keywordsToCheck.forEach(keyword => {
     const keywordLower = keyword.toLowerCase();
     
@@ -163,30 +511,31 @@ function extractKeywords(text) {
     // Escape special regex characters in the keyword
     const escapedKeyword = keyword.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
     
-    // STEP 1: For multi-word phrases, allow flexible spacing (space or hyphen)
-    // This ensures '3D Design' matches '3D Design' or '3D-Design' but NOT '3 other Design'
+    // For multi-word phrases: Require lexical adjacency (words must be next to each other)
     let regexPattern;
     if (keyword.includes(' ')) {
-      // Replace spaces with [\s-]+ to match space or hyphen between words
+      // Replace spaces with [\s-]+ to match space or hyphen between words only
       const flexiblePattern = escapedKeyword.split(/\s+/).join('[\\s-]+');
-      // STEP 2: Make trailing 's' optional for better stemming
-      // Pattern: (?:^|[^a-zA-Z0-9])(keyword)(s)?(?:$|[^a-zA-Z0-9])
+      // Make trailing 's' optional for pluralization/stemming
       regexPattern = `(?:^|[^a-zA-Z0-9])(${flexiblePattern})(s)?(?:$|[^a-zA-Z0-9])`;
     } else {
-      // Single word - use standard pattern with optional trailing 's'
+      // Single word - case-insensitive with optional trailing 's'
       regexPattern = `(?:^|[^a-zA-Z0-9])(${escapedKeyword})(s)?(?:$|[^a-zA-Z0-9])`;
     }
     
     const regex = new RegExp(regexPattern, 'i');
     
-    if (regex.test(text)) {
-      foundKeywords.push(keyword);
+    // Use exec() instead of test() to capture the actual matched text from JD
+    const match = regex.exec(text);
+    if (match) {
+      // Capture the actual matched text from the JD (match[1] is the captured group)
+      const matchedText = match[1];
+      foundKeywords.push(matchedText);  // Store actual matched text, not keyword from list
       foundKeywordsLower.add(keywordLower);
       return;
     }
     
-    // FUZZY MATCHING: If keyword ends with 's', try matching without 's' (singular)
-    // This handles cases like 'Design Systems' matching 'Design System'
+    // PLURALIZATION: If keyword ends with 's', try matching without 's' (singular form)
     if (keyword.endsWith('s') && keyword.length > 3) {
       const singularKeyword = keyword.slice(0, -1);
       const escapedSingular = singularKeyword.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
@@ -199,24 +548,53 @@ function extractKeywords(text) {
       }
       
       const singularRegex = new RegExp(`(?:^|[^a-zA-Z0-9])(${singularPattern})(?:$|[^a-zA-Z0-9])`, 'i');
+      const singularMatch = singularRegex.exec(text);
+      if (singularMatch) {
+        const matchedText = singularMatch[1];
+        foundKeywords.push(matchedText);  // Store actual matched text
+        foundKeywordsLower.add(keywordLower);
+        return;
+      }
+    }
+    
+    // SUFFIX VARIATIONS: Check for "ing", "ed", "d" variations
+    // Example: "test" matches "testing", "tested", "tests"
+    for (const suffix of suffixes) {
+      if (suffix === 's') continue; // Already handled above
       
-      if (singularRegex.test(text)) {
-        foundKeywords.push(keyword);
+      const keywordWithSuffix = keyword + suffix;
+      const escapedSuffix = keywordWithSuffix.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+      
+      let suffixPattern;
+      if (keyword.includes(' ')) {
+        const flexiblePattern = escapedSuffix.split(/\s+/).join('[\\s-]+');
+        suffixPattern = `(?:^|[^a-zA-Z0-9])(${flexiblePattern})(?:$|[^a-zA-Z0-9])`;
+      } else {
+        suffixPattern = `(?:^|[^a-zA-Z0-9])(${escapedSuffix})(?:$|[^a-zA-Z0-9])`;
+      }
+      
+      const suffixRegex = new RegExp(suffixPattern, 'i');
+      const suffixMatch = suffixRegex.exec(text);
+      if (suffixMatch) {
+        const matchedText = suffixMatch[1];
+        foundKeywords.push(matchedText);  // Store actual matched text
         foundKeywordsLower.add(keywordLower);
         return;
       }
     }
   });
   
+  // Return original matched text (preserve case for display)
+  // Normalization will be done separately for comparison only
   return foundKeywords;
 }
 
-// Analyze resume against job description (case-insensitive)
+// Analyze resume against job description with domain detection
+// Reference: Jobalytics util.js get_match_result and match_result_via_basic_algorithm
 function analyzeResume(resumeText, jobDescription) {
   console.log('--- Starting Resume Analysis ---');
   console.log('Resume text length:', resumeText ? resumeText.length : 0);
   console.log('Job description length:', jobDescription ? jobDescription.length : 0);
-  console.log('Loaded keywords count:', loadedKeywords.length);
   
   // STEP 5: Validation - Check if resume contains binary data
   if (resumeText && resumeText.startsWith('%PDF')) {
@@ -224,46 +602,68 @@ function analyzeResume(resumeText, jobDescription) {
     throw new Error('Resume was not parsed correctly. Please re-upload.');
   }
   
-  // STEP 4: Verification logging - show resume preview to verify readability
-  console.log('Resume Preview:', resumeText ? resumeText.substring(0, 500) : '(empty)');
+  // STEP 1: Detect domain from job metadata and description
+  const jobTitle = currentJobMetadata.title || '';
+  // Use source from metadata (hostname) or empty string
+  const jobUrl = currentJobMetadata.source || '';
+  const detectedDomain = detectJobDomain(jobTitle, jobDescription, jobUrl);
+  
+  // Store detected domain in metadata
+  currentJobMetadata.domain = detectedDomain;
+  
+  console.log('🔍 Detected domain:', detectedDomain);
   console.log('Job Preview:', jobDescription ? jobDescription.substring(0, 300) : '(empty)');
   
-  // Extract keywords from both texts (case-insensitive)
-  const resumeKeywords = extractKeywords(resumeText);
-  const jobKeywords = extractKeywords(jobDescription);
+  // STEP 2: Extract keywords from both texts (preserve original case for display)
+  const resumeKeywordsOriginal = extractKeywords(resumeText, detectedDomain);
+  const jobKeywordsOriginal = extractKeywords(jobDescription, detectedDomain);
   
-  console.log('Keywords found in resume:', resumeKeywords.length, resumeKeywords);
-  console.log('Keywords found in job description:', jobKeywords.length, jobKeywords);
+  console.log('Keywords found in resume:', resumeKeywordsOriginal.length, resumeKeywordsOriginal);
+  console.log('Keywords found in job description:', jobKeywordsOriginal.length, jobKeywordsOriginal);
   
-  // Normalize keywords to lowercase for comparison
+  // STEP 3: Normalize keywords only for comparison (use canonical forms)
+  // This ensures "HCD" and "human-centered design" both normalize to "hcd" for matching
+  const resumeKeywords = normalizeForComparison(resumeKeywordsOriginal);
+  const jobKeywords = normalizeForComparison(jobKeywordsOriginal);
+  
+  // Convert normalized keywords to lowercase for comparison
   const resumeKeywordsLower = resumeKeywords.map(kw => kw.toLowerCase());
   const jobKeywordsLower = jobKeywords.map(kw => kw.toLowerCase());
   
   // Find matched keywords (keywords that appear in both resume and job)
+  // Use ORIGINAL text from job description for display
   const matchedKeywords = [];
   const matchedKeywordsLower = new Set();
   
-  jobKeywords.forEach(kw => {
-    const kwLower = kw.toLowerCase();
+  jobKeywordsOriginal.forEach(kwOriginal => {
+    // Normalize the original keyword for comparison
+    const kwNormalized = normalizeForComparison([kwOriginal])[0];
+    const kwLower = kwNormalized.toLowerCase();
+    
     if (resumeKeywordsLower.includes(kwLower) && !matchedKeywordsLower.has(kwLower)) {
-      matchedKeywords.push(kw);
+      matchedKeywords.push(kwOriginal);  // Use original text for display
       matchedKeywordsLower.add(kwLower);
     }
   });
   
   // Find unmatched keywords (keywords in job but not in resume)
+  // Use ORIGINAL text from job description for display
   const unmatchedKeywords = [];
   const unmatchedKeywordsLower = new Set();
   
-  jobKeywords.forEach(kw => {
-    const kwLower = kw.toLowerCase();
+  jobKeywordsOriginal.forEach(kwOriginal => {
+    // Normalize the original keyword for comparison
+    const kwNormalized = normalizeForComparison([kwOriginal])[0];
+    const kwLower = kwNormalized.toLowerCase();
+    
     if (!resumeKeywordsLower.includes(kwLower) && !unmatchedKeywordsLower.has(kwLower)) {
-      unmatchedKeywords.push(kw);
+      unmatchedKeywords.push(kwOriginal);  // Use original text for display
       unmatchedKeywordsLower.add(kwLower);
     }
   });
   
-  // Calculate score: (Matched / Total keywords found in job) * 100
+  // STEP 4: Calculate score using basic algorithm (simple percentage)
+  // Reference: Jobalytics match_result_via_basic_algorithm line 528
   const totalKeywordsInJob = matchedKeywords.length + unmatchedKeywords.length;
   const score = totalKeywordsInJob > 0 ? Math.round((matchedKeywords.length / totalKeywordsInJob) * 100) : 0;
   
@@ -276,6 +676,7 @@ function analyzeResume(resumeText, jobDescription) {
   console.log('✓ Matched keywords:', matchedKeywords.length, '(', matchedTech.length, 'technical +', matchedSoft.length, 'soft)');
   console.log('✗ Missing keywords:', unmatchedKeywords.length, '(', unmatchedTech.length, 'technical +', unmatchedSoft.length, 'soft)');
   console.log('Match score:', score + '%');
+  console.log('Domain:', detectedDomain);
   console.log('--- Analysis Complete ---');
   
   return {
@@ -287,7 +688,8 @@ function analyzeResume(resumeText, jobDescription) {
     matchedTech,
     matchedSoft,
     unmatchedTech,
-    unmatchedSoft
+    unmatchedSoft,
+    domain: detectedDomain
   };
 }
 
@@ -320,17 +722,33 @@ async function getJobDescription() {
         async function waitForElement(selectors, maxWaitMs = 2000) {
           const startTime = Date.now();
           const checkInterval = 200; // Check every 200ms
+          const triedSelectors = [];
+          const foundButEmpty = [];
           
-          while (Date.now() - startTime < maxWaitMs) {
+          // Increase wait time for collections pages AND search results pages (content loads dynamically)
+          const actualMaxWait = needsIframeCheck ? 5000 : maxWaitMs;
+          
+          // #region agent log
+          fetch('http://127.0.0.1:7242/ingest/3b595b84-3d7c-4c26-80fb-96782efb256f',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'sidepanel.js:511',message:'waitForElement entry',data:{selectorCount:selectors.length,maxWaitMs:actualMaxWait,needsIframeCheck,isCollectionsPage,isSearchResultsPage},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'D'})}).catch(()=>{});
+          // #endregion
+          
+          while (Date.now() - startTime < actualMaxWait) {
             for (const selector of selectors) {
               try {
                 const element = document.querySelector(selector);
                 if (element) {
                   const text = (element.innerText || element.textContent || '').trim();
                   if (text.length > 100) {
+                    // #region agent log
+                    fetch('http://127.0.0.1:7242/ingest/3b595b84-3d7c-4c26-80fb-96782efb256f',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'sidepanel.js:520',message:'Element found with valid text',data:{selector,textLength:text.length,elapsed:Date.now()-startTime},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'E'})}).catch(()=>{});
+                    // #endregion
                     console.log(`✅ Element found after ${Date.now() - startTime}ms: "${selector}"`);
                     return { element, selector };
+                  } else {
+                    foundButEmpty.push({selector, textLength: text.length});
                   }
+                } else {
+                  triedSelectors.push(selector);
                 }
               } catch (e) {
                 // Skip invalid selector
@@ -340,7 +758,11 @@ async function getJobDescription() {
             await new Promise(resolve => setTimeout(resolve, checkInterval));
           }
           
-          console.log(`⏱ Timeout: No valid element found after ${maxWaitMs}ms`);
+          // #region agent log
+          fetch('http://127.0.0.1:7242/ingest/3b595b84-3d7c-4c26-80fb-96782efb256f',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'sidepanel.js:534',message:'waitForElement timeout',data:{triedCount:triedSelectors.length,foundButEmptyCount:foundButEmpty.length,foundButEmpty:foundButEmpty.slice(0,3),elapsed:Date.now()-startTime},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'F'})}).catch(()=>{});
+          // #endregion
+          
+          console.log(`⏱ Timeout: No valid element found after ${actualMaxWait}ms`);
           return null;
         }
         
@@ -378,9 +800,38 @@ async function getJobDescription() {
         }
         
         // STEP 1: High-precision selectors based on actual LinkedIn HTML structure
+        // Check if we're on a collections page OR search results page - both use iframes
+        const isCollectionsPage = window.location.pathname.includes('/collections/');
+        const isSearchResultsPage = window.location.pathname.includes('/search-results/') && 
+                                    window.location.search.includes('currentJobId');
+        const isJobViewPage = window.location.pathname.includes('/view/') || 
+                              window.location.pathname.includes('/jobs/view/');
+        const needsIframeCheck = isCollectionsPage || isSearchResultsPage;
+        
+        // #region agent log
+        fetch('http://127.0.0.1:7242/ingest/3b595b84-3d7c-4c26-80fb-96782efb256f',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'sidepanel.js:589',message:'Page type detection',data:{url:window.location.href,pathname:window.location.pathname,isCollectionsPage,isSearchResultsPage,isJobViewPage,needsIframeCheck},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A'})}).catch(()=>{});
+        // #endregion
+        
         const selectors = [
           // PRIMARY: LinkedIn job details ID (HIGHEST PRIORITY)
           '#job-details',
+          
+          // LinkedIn Collections Page selectors (for /jobs/collections/ pages)
+          // Reference: Jobalytics crawler.js - linkedin_job_collection uses #job-details
+          ...(isCollectionsPage ? [
+            '#job-details', // Primary selector for collections (reference: Jobalytics)
+            '.jobs-search__job-details',
+            '.jobs-search__job-details-container',
+            '[data-test-id="job-details"]',
+            '.jobs-details__main-content',
+            '.jobs-search__job-details__container',
+            '.jobs-search__job-details-container .jobs-description',
+            '.jobs-search__job-details-container .jobs-description__content',
+            '.jobs-search__job-details-container .jobs-description__text',
+            '.jobs-search__job-details-container [class*="description"]',
+            '.details-pane__content .description', // Reference: Jobalytics crawler.js line 96
+            '[class*="details-pane"] [class*="description"]'
+          ] : []),
           
           // LinkedIn-specific selectors (confirmed working on 2026 structure)
           '.jobs-description-content__text--stretch',
@@ -398,6 +849,17 @@ async function getJobDescription() {
           '#jobDescriptionText',
           '.jobsearch-JobComponent-description',
           '.jobsearch-jobDescriptionText',
+          '.jobsearch-JobComponent-embeddedBody', // For iframe content
+          
+          // Glassdoor selectors (reference: Jobalytics)
+          'div[class*="JobDetails_jobDescriptionWrapper"]',
+          '.jobDescriptionContent',
+          
+          // Workday selectors (reference: Jobalytics)
+          '*[data-automation-id="jobPostingDescription"]',
+          
+          // Handshake selectors (reference: Jobalytics)
+          '.style__container___3At56',
           
           // Generic job description selectors (lowest priority)
           '[data-job-description]',
@@ -409,122 +871,1051 @@ async function getJobDescription() {
           '[role="article"]'
         ];
         
-        // STEP 1: Extract job metadata with high-precision selectors
-        function extractJobMetadata() {
-          console.log('📋 Extracting job metadata with precision selectors...');
+        // STEP 2: PRECISION metadata extraction with Jobalytics selectors
+        // Reference: Jobalytics createPersistentScore.js (lines 56-116)
+        async function extractJobMetadata() {
+          console.log('📋 Extracting job metadata with Jobalytics-style selectors...');
           
           let title = '';
           let company = '';
           let date = '';
           const source = window.location.hostname;
           
-          // Extract Job Title - High precision selectors
-          const titleSelectors = [
-            'h1',
-            '.job-details-jobs-unified-top-card__job-title',
-            '.jobs-unified-top-card__job-title',
-            '.job-title',
-            '[class*="job-title"]'
-          ];
+          // Helper function to get text from class (reference: Jobalytics _text_from_class)
+          function _text_from_class(class_name, doc = document) {
+            const divs = doc.getElementsByClassName(class_name);
+            if (divs.length == 0) {
+              return '';
+            }
+            return divs[0].innerText.trim();
+          }
           
-          for (const sel of titleSelectors) {
-            const el = document.querySelector(sel);
-            if (el && el.innerText && el.innerText.trim().length > 0) {
-              title = el.innerText.trim();
-              console.log(`✓ Title found via "${sel}": "${title}"`);
-              break;
+          // Helper function to clean company name
+          function cleanCompanyName(rawCompany) {
+            if (!rawCompany) return '';
+            let cleaned = rawCompany.trim();
+            // Clean: Remove 'Show match details', 'H-1B', and other noise
+            cleaned = cleaned.replace(/Show match details/gi, '');
+            cleaned = cleaned.replace(/H-1B/gi, '');
+            cleaned = cleaned.replace(/\(.*?\)/g, ''); // Remove anything in parentheses
+            // Take only first line
+            cleaned = cleaned.split('\n')[0].trim();
+            // Normalize whitespace
+            cleaned = cleaned.replace(/\s+/g, ' ').trim();
+            return cleaned;
+          }
+          
+          // Enhanced job title validation with confidence scoring
+          function isValidJobTitle(title, context = {}) {
+            if (!title || title.trim().length === 0) return { valid: false, confidence: 0, reason: 'empty' };
+            
+            const titleLower = title.toLowerCase().trim();
+            const titleOriginal = title.trim();
+            let confidence = 0;
+            
+            // REJECT invalid patterns (high priority - reject immediately)
+            const invalidPatterns = [
+              /^\d+\s+results?$/i,           // "10 results"
+              /^search\s+results?$/i,
+              /^jobs?$/i,
+              /^find\s+jobs?$/i,
+              /^job\s+search$/i,
+              /^showing\s+\d+/i,
+              /^page\s+\d+/i,
+              /^results?$/i,
+              /^no\s+results?$/i,
+              /^try\s+again/i,
+              /^error/i,
+              /^loading/i,
+              /^click\s+here/i,
+              /^view\s+more/i,
+              /^apply\s+now$/i,
+              /^save\s+job$/i,
+              /^share$/i,
+              /^\d+$/i,                      // Only numbers
+              /^[a-z]$/i                     // Single letter
+            ];
+            
+            for (const pattern of invalidPatterns) {
+              if (pattern.test(titleLower)) {
+                return { valid: false, confidence: 0, reason: 'invalid pattern' };
+              }
+            }
+            
+            // LENGTH CHECK
+            if (titleOriginal.length < 5 || titleOriginal.length > 150) {
+              return { valid: false, confidence: 0, reason: 'invalid length' };
+            }
+            
+            // POSITIVE PATTERNS (increase confidence)
+            const jobPatterns = [
+              /\b(engineer|developer|designer|manager|analyst|specialist|coordinator|director|architect|consultant|executive|officer|assistant|intern|trainee)\b/i,
+              /\b(senior|junior|lead|principal|staff|associate|entry|mid)\s+\w+/i,
+              /\b(software|product|data|marketing|sales|ux|ui|frontend|backend|full.?stack)\s+\w+/i,
+              /\b(product\s+manager|pm|program\s+manager|project\s+manager)\b/i
+            ];
+            
+            let hasJobPattern = false;
+            for (const pattern of jobPatterns) {
+              if (pattern.test(titleLower)) {
+                confidence += 30;
+                hasJobPattern = true;
+                break;
+              }
+            }
+            
+            // FORMAT CHECK
+            const hasProperCase = /[A-Z]/.test(titleOriginal) && /[a-z]/.test(titleOriginal);
+            if (hasProperCase) confidence += 15;
+            
+            // CONTEXT BOOST (if from reliable source)
+            if (context.source === 'json-ld' || context.source === 'structured-data') {
+              confidence += 50; // Very high confidence
+            } else if (context.source === 'meta-tag') {
+              confidence += 40;
+            } else if (context.source && context.source.includes('job-title')) {
+              confidence += 35;
+            } else if (context.isHeading && context.inJobContainer) {
+              confidence += 25;
+            }
+            
+            // MINIMUM THRESHOLD
+            const MIN_CONFIDENCE = 30;
+            if (confidence < MIN_CONFIDENCE) {
+              return { valid: false, confidence: confidence, reason: 'low confidence' };
+            }
+            
+            // If no job pattern matched, require higher confidence
+            if (!hasJobPattern && confidence < 50) {
+              return { valid: false, confidence: confidence, reason: 'no job pattern' };
+            }
+            
+            return { valid: true, confidence: Math.min(confidence, 100) };
+          }
+          
+          // Hybrid job title extraction with validation
+          function extractJobTitleHybrid(doc = document) {
+            console.log('🔍 Hybrid job title extraction...');
+            
+            let title = null;
+            
+            // PRIORITY 1: Structured Data (JSON-LD) - MOST RELIABLE
+            if (!title) {
+              const scripts = doc.querySelectorAll('script[type="application/ld+json"]');
+              for (const script of scripts) {
+                try {
+                  const data = JSON.parse(script.textContent);
+                  
+                  // Single object
+                  if (data['@type'] === 'JobPosting' && data.title) {
+                    const validation = isValidJobTitle(data.title.trim(), { source: 'json-ld' });
+                    if (validation.valid) {
+                      title = data.title.trim();
+                      console.log(`✅ Title found (JSON-LD, confidence: ${validation.confidence}%): "${title}"`);
+                      break;
+                    }
+                  }
+                  
+                  // Array format
+                  if (Array.isArray(data)) {
+                    for (const item of data) {
+                      if (item['@type'] === 'JobPosting' && item.title) {
+                        const validation = isValidJobTitle(item.title.trim(), { source: 'json-ld' });
+                        if (validation.valid) {
+                          title = item.title.trim();
+                          console.log(`✅ Title found (JSON-LD array, confidence: ${validation.confidence}%): "${title}"`);
+                          break;
+                        }
+                      }
+                    }
+                    if (title) break;
+                  }
+                  
+                  // @graph format
+                  if (data['@graph']) {
+                    for (const item of data['@graph']) {
+                      if (item['@type'] === 'JobPosting' && item.title) {
+                        const validation = isValidJobTitle(item.title.trim(), { source: 'json-ld' });
+                        if (validation.valid) {
+                          title = item.title.trim();
+                          console.log(`✅ Title found (JSON-LD @graph, confidence: ${validation.confidence}%): "${title}"`);
+                          break;
+                        }
+                      }
+                    }
+                    if (title) break;
+                  }
+                } catch (e) {
+                  // Skip invalid JSON
+                }
+              }
+            }
+            
+            // PRIORITY 2: Meta Tags
+            if (!title) {
+              const metaSelectors = [
+                'meta[property="og:title"]',
+                'meta[name="twitter:title"]',
+                'meta[property="og:job:title"]',
+                'meta[name="title"]'
+              ];
+              
+              for (const selector of metaSelectors) {
+                const meta = doc.querySelector(selector);
+                if (meta) {
+                  const text = (meta.getAttribute('content') || '').trim();
+                  const validation = isValidJobTitle(text, { source: 'meta-tag' });
+                  if (validation.valid) {
+                    title = text;
+                    console.log(`✅ Title found (meta tag, confidence: ${validation.confidence}%): "${title}"`);
+                    break;
+                  }
+                }
+              }
+            }
+            
+            // PRIORITY 3: Known LinkedIn Selectors (with validation)
+            if (!title) {
+              const highConfidenceSelectors = [
+                '.jobs-details-top-card__job-title',
+                '.jobs-top-card__job-title',
+                '.job-details-jobs-unified-top-card__job-title',
+                '[data-test-job-title]',
+                '[data-job-title]',
+                '.job-details-top-card__job-title',
+                '.jobs-details-top-card__job-title-link',
+                '.jobs-top-card__job-title-link',
+                'h2.jobs-details-top-card__job-title',
+                'h2.jobs-top-card__job-title',
+                '.jobs-unified-top-card__job-title'
+              ];
+              
+              for (const selector of highConfidenceSelectors) {
+                const el = doc.querySelector(selector);
+                if (el) {
+                  const text = (el.innerText || el.textContent || el.getAttribute('data-job-title') || '').trim();
+                  if (text) {
+                    const validation = isValidJobTitle(text.split('\n')[0].trim(), { 
+                      source: `selector:${selector}`,
+                      isHeading: el.tagName.match(/^H[1-4]$/),
+                      inJobContainer: true
+                    });
+                    if (validation.valid) {
+                      title = text.split('\n')[0].trim();
+                      console.log(`✅ Title found (${selector}, confidence: ${validation.confidence}%): "${title}"`);
+                      break;
+            } else {
+                      console.log(`❌ Rejected from ${selector}: "${text}" (${validation.reason})`);
+                    }
+                  }
+                }
+              }
+            }
+            
+            // PRIORITY 4: Aria labels
+          if (!title) {
+              const ariaEl = doc.querySelector('[aria-label*="job title"], [aria-label*="Job Title"]');
+              if (ariaEl) {
+                const text = ariaEl.getAttribute('aria-label').replace(/job title:?/i, '').trim();
+                const validation = isValidJobTitle(text);
+                if (validation.valid) {
+                  title = text;
+                  console.log(`✅ Title found (aria-label, confidence: ${validation.confidence}%): "${title}"`);
+                }
+              }
+            }
+            
+            // PRIORITY 5: Headings in job containers (with validation)
+            if (!title) {
+              const jobContainers = [
+                '.jobs-details-top-card',
+                '.jobs-top-card',
+                '.job-details-jobs-unified-top-card',
+                '.jobs-details',
+                '[data-job-id]'
+              ];
+              
+              for (const containerSel of jobContainers) {
+                const container = doc.querySelector(containerSel);
+                if (container) {
+                  const headings = container.querySelectorAll('h1, h2, h3');
+                  for (const heading of headings) {
+                    const text = (heading.innerText || heading.textContent || '').trim();
+                    const validation = isValidJobTitle(text, {
+                      isHeading: true,
+                      inJobContainer: true
+                    });
+                    if (validation.valid) {
+                      title = text.split('\n')[0].trim();
+                      console.log(`✅ Title found (heading in ${containerSel}, confidence: ${validation.confidence}%): "${title}"`);
+                      break;
+                    }
+                  }
+                  if (title) break;
+                }
+              }
+            }
+            
+            // PRIORITY 6: Topcard fallback (logged-out)
+            if (!title) {
+              try {
+                const detailsPane = doc.getElementsByClassName('details-pane__content')[0];
+                if (detailsPane) {
+                  const topcardTitle = detailsPane.getElementsByClassName('topcard__title')[0];
+                  if (topcardTitle) {
+                    const text = topcardTitle.textContent.trim();
+                    const validation = isValidJobTitle(text);
+                    if (validation.valid) {
+                      title = text;
+                      console.log(`✅ Title found (topcard, confidence: ${validation.confidence}%): "${title}"`);
+                    }
+                  }
+                }
+              } catch (err) {
+                // Fallback failed
+              }
+            }
+            
+            return title;
+          }
+          
+          // STEP 1: Check iframe content first (for collections pages AND search results pages)
+          if (needsIframeCheck) {
+            const pageType = isCollectionsPage ? 'collections' : 'search results';
+            console.log(`🔍 Checking iframes for metadata (${pageType} page)...`);
+            
+            // Wait a bit for iframe content to load on search results pages (enhanced with MutationObserver)
+            if (isSearchResultsPage) {
+              console.log('⏳ Waiting for iframe content to load (search results page)...');
+              
+              // Enhanced iframe extraction with MutationObserver
+              const iframeCheck = new Promise((resolve) => {
+                let resolved = false;
+                
+                // Method 1: Wait with timeout
+                setTimeout(() => {
+                  if (!resolved) {
+                    resolved = true;
+                    resolve();
+                  }
+                }, 2000);
+                
+                // Method 2: Use MutationObserver to detect when iframe loads
+                try {
+                  const observer = new MutationObserver((mutations) => {
+                    if (resolved) return;
+                    
+                    const iframes = document.querySelectorAll('iframe');
+                    for (const iframe of iframes) {
+                      try {
+                        const iframeDoc = iframe.contentDocument || iframe.contentWindow?.document;
+                        if (iframeDoc && iframeDoc.body && iframeDoc.body.innerText && iframeDoc.body.innerText.trim().length > 100) {
+                          console.log('✓ Iframe content detected via MutationObserver');
+                          if (!resolved) {
+                            resolved = true;
+                            observer.disconnect();
+                            resolve();
+                            return;
+                          }
+                        }
+                      } catch (e) {
+                        // Cross-origin
+                      }
+                    }
+                  });
+                  
+                  observer.observe(document.body, {
+                    childList: true,
+                    subtree: true
+                  });
+                  
+                  // Cleanup after 5 seconds
+                  setTimeout(() => {
+                    if (!resolved) {
+                      resolved = true;
+                      observer.disconnect();
+                      resolve();
+                    }
+                  }, 5000);
+                } catch (e) {
+                  console.log('⚠️ MutationObserver not available, using timeout only');
+                }
+              });
+              
+              await iframeCheck;
+            }
+            
+            const iframes = document.querySelectorAll('iframe');
+            console.log(`📦 Found ${iframes.length} iframes to check`);
+            
+            for (const iframe of iframes) {
+              try {
+                const iframeDoc = iframe.contentDocument || iframe.contentWindow?.document;
+                if (iframeDoc) {
+                  // Check if iframe has content (not just empty)
+                  const iframeBody = iframeDoc.body;
+                  if (iframeBody && iframeBody.innerText && iframeBody.innerText.trim().length > 10) {
+                    console.log(`✓ Iframe has content (${iframeBody.innerText.trim().length} chars)`);
+                    
+                    // Extract title from iframe using hybrid approach
+                    if (!title) {
+                      title = extractJobTitleHybrid(iframeDoc);
+                      if (title) {
+                        console.log(`✅ Title found in iframe: "${title}"`);
+                      } else {
+                        console.log('⚠️ No valid title found in iframe');
+                      }
+                    }
+                    
+                    // Extract company from iframe (Jobalytics selectors - note: uses -url not -name)
+                    if (!company) {
+                      const iframeCompany = _text_from_class('jobs-details-top-card__company-url', iframeDoc) ||
+                                           _text_from_class('jobs-top-card__company-url', iframeDoc);
+                      if (iframeCompany) {
+                        company = cleanCompanyName(iframeCompany);
+                        console.log(`✓ Company found in iframe: "${company}"`);
+                      }
+                    }
+                    
+                    // Extract date from iframe
+                    if (!date) {
+                      // Try time elements first
+                      const timeEls = iframeDoc.querySelectorAll('time');
+                      for (const timeEl of timeEls) {
+                        const timeText = (timeEl.innerText || timeEl.textContent || timeEl.getAttribute('datetime') || '').trim();
+                        if (timeText) {
+                          date = timeText;
+                          console.log(`✓ Date found in iframe (time element): "${date}"`);
+                          break;
+                        }
+                      }
+                      
+                      // Try low-emphasis spans
+                      if (!date) {
+                        const lowEmphasisSpans = iframeDoc.querySelectorAll('.tvm__text--low-emphasis span');
+                        const dateRegex = /\d+\s+(hour|day|week|month)s?\s+ago|just\s+now|today|yesterday/i;
+                        for (const span of lowEmphasisSpans) {
+                          const text = (span.innerText || span.textContent || '').trim();
+                          const match = text.match(dateRegex);
+                          if (match) {
+                            date = match[0];
+                            console.log(`✓ Date found in iframe (low-emphasis): "${date}"`);
+                            break;
+                          }
+                        }
+                      }
+                    }
+                    
+                    // If we found all metadata in iframe, return early
+                    if (title && company && date) {
+                      console.log('✅ All metadata found in iframe, returning early');
+                      break;
+                    }
+                  } else {
+                    console.log('⚠️ Iframe appears empty or has no content');
+                  }
+                }
+              } catch (e) {
+                // Cross-origin iframe, can't access
+                console.log('⚠️ Cannot access iframe (cross-origin or not loaded):', e.message);
+              }
+            }
+            
+            if (title || company || date) {
+              console.log(`📋 Metadata from iframe: title="${title || 'not found'}", company="${company || 'not found'}", date="${date || 'not found'}"`);
+            } else {
+              console.log('⚠️ No metadata found in any iframe');
             }
           }
           
-          // Extract Company Name - Primary selector with cleanup
-          const companyEl = document.querySelector('.job-details-jobs-unified-top-card__company-name a');
-          if (companyEl && companyEl.innerText) {
-            // STEP 2: Clean the data - take only first line to remove platform noise
-            company = companyEl.innerText.split('\n')[0].trim();
-            company = company.replace(/\s+/g, ' ').trim();
-            console.log(`✓ Company found: "${company}"`);
-          } else {
-            // Fallback selectors if primary fails
+          // STEP 2: JOB TITLE - Multiple fallback methods
+          if (!title) {
+            console.log('🔍 Searching for job title using multiple methods...');
+            
+            // METHOD 1: Browser tab title extraction
+            const pageTitle = document.title || '';
+            if (pageTitle) {
+              // Clean LinkedIn page title: "Job Title | Company | LinkedIn" or "Job Title - Company | LinkedIn"
+              let cleanedTitle = pageTitle
+                .replace(/\s*\|\s*LinkedIn.*$/i, '') // Remove "| LinkedIn" and everything after
+                .replace(/\s*-\s*[^|]+\s*\|.*$/i, '') // Remove "- Company | ..."
+                .replace(/\s*\|.*$/i, '') // Remove any remaining "| ..."
+                .trim();
+              
+              const validation = isValidJobTitle(cleanedTitle);
+              if (validation.valid) {
+                title = cleanedTitle;
+                console.log(`✅ Title found from browser tab (confidence: ${validation.confidence}%): "${title}"`);
+              } else {
+                console.log(`❌ Browser tab title rejected: "${cleanedTitle}" (${validation.reason})`);
+              }
+            }
+            
+            // METHOD 2: Visible DOM search on search results page
+            if (!title && isSearchResultsPage) {
+              // Get currentJobId from URL
+              const urlParams = new URLSearchParams(window.location.search);
+              const currentJobId = urlParams.get('currentJobId');
+              
+              if (currentJobId) {
+                console.log(`🔍 Searching visible DOM for job card with ID: ${currentJobId}`);
+                
+                // Find the job card with matching data-job-id
+                const jobCard = document.querySelector(`[data-job-id="${currentJobId}"]`) ||
+                               document.querySelector(`[data-entity-urn*="${currentJobId}"]`) ||
+                               document.querySelector(`[data-job-id*="${currentJobId}"]`);
+                
+                if (jobCard) {
+                  console.log('✓ Found job card in visible DOM');
+                  
+                  // Look for title in the card
+                  const titleSelectors = [
+                    '.job-card-list__title',
+                    '.jobs-search-results__list-item-title',
+                    'h3',
+                    'h2',
+                    '[data-control-name="job_card_title"]',
+                    '.job-card-container__link',
+                    'a[data-control-name="job_card_title"]'
+                  ];
+                  
+                  for (const selector of titleSelectors) {
+                    const titleEl = jobCard.querySelector(selector);
+                    if (titleEl) {
+                      const text = (titleEl.innerText || titleEl.textContent || titleEl.getAttribute('aria-label') || '').trim();
+                      if (text) {
+                        const validation = isValidJobTitle(text);
+                        if (validation.valid) {
+                          title = text;
+                          console.log(`✅ Title found from visible DOM (${selector}, confidence: ${validation.confidence}%): "${title}"`);
+                          break;
+                        } else {
+                          console.log(`❌ Rejected from visible DOM (${selector}): "${text}" (${validation.reason})`);
+                        }
+                      }
+                    }
+                  }
+                } else {
+                  console.log('⚠️ Job card not found in visible DOM');
+                }
+              }
+            }
+            
+            // METHOD 3: Parse job description text
+            if (!title) {
+              // Try to extract job description text from the page
+              const jobDescSelectors = [
+                '#job-details',
+                '.jobs-description__content',
+                '.jobs-description-content__text',
+                '[data-job-id] .jobs-description',
+                '.job-details__job-description',
+                'section[data-test-id="job-details"]'
+              ];
+              
+              let jobDescText = '';
+              for (const selector of jobDescSelectors) {
+                const descEl = document.querySelector(selector);
+                if (descEl) {
+                  jobDescText = (descEl.innerText || descEl.textContent || '').trim();
+                  if (jobDescText && jobDescText.length > 50) {
+                    break;
+                  }
+                }
+              }
+              
+              // Also check iframes for job description
+              if (!jobDescText || jobDescText.length < 50) {
+                const iframes = document.querySelectorAll('iframe');
+                for (const iframe of iframes) {
+                  try {
+                    const iframeDoc = iframe.contentDocument || iframe.contentWindow?.document;
+                    if (iframeDoc) {
+                      const iframeDescEl = iframeDoc.querySelector('#job-details') ||
+                                          iframeDoc.querySelector('.jobs-description__content');
+                      if (iframeDescEl) {
+                        jobDescText = (iframeDescEl.innerText || iframeDescEl.textContent || '').trim();
+                        if (jobDescText && jobDescText.length > 50) {
+                          break;
+                        }
+                      }
+                    }
+                  } catch (e) {
+                    // Cross-origin
+                  }
+                }
+              }
+              
+              if (jobDescText && jobDescText.length > 50) {
+                console.log(`🔍 Parsing job description text (${jobDescText.length} chars) for title...`);
+                
+                // Look for title patterns in first 300 characters
+                const preview = jobDescText.substring(0, 300);
+                
+                // Pattern 1: "At [Company] we're looking for... [Job Title]"
+                // Pattern 2: "Job Title - [description]"
+                // Pattern 3: "We are seeking a [Job Title]"
+                // Pattern 4: "[Job Title] Intern" or "[Job Title] Engineer"
+                const titlePatterns = [
+                  /(?:looking for|seeking|hiring)\s+(?:a\s+)?([A-Z][^.!?]{10,80}?)(?:\s+(?:to|who|that|intern|engineer|designer|manager|position|role))/i,
+                  /^([A-Z][^.!?\n]{10,80}?)(?:\s*-\s*|\.|$)/m,
+                  /(?:position|role|opening)[:\s]+([A-Z][^.!?\n]{10,80}?)(?:\s*$|\s*at\s+[A-Z])/i,
+                  /([A-Z][a-z]+(?:\s+[A-Z][a-z]+)*\s+(?:Intern|Engineer|Designer|Manager|Analyst|Specialist|Coordinator|Director|Architect|Consultant|Executive|Officer|Assistant|Trainee))/,
+                  /(?:join our\s+)?(\d+[- ]week\s+[A-Z][^.!?]{10,60}?)(?:\s+program|internship)/i
+                ];
+                
+                for (const pattern of titlePatterns) {
+                  const match = preview.match(pattern);
+                  if (match && match[1]) {
+                    const candidate = match[1].trim();
+                    const validation = isValidJobTitle(candidate);
+                    if (validation.valid) {
+                      title = candidate;
+                      console.log(`✅ Title found from job description (confidence: ${validation.confidence}%): "${title}"`);
+                      break;
+                    }
+                  }
+                }
+              }
+            }
+            
+            // METHOD 4: Network request interception (optional, detects API calls)
+            if (!title && isSearchResultsPage) {
+              console.log('🔍 Attempting network request interception...');
+              
+              // Note: PerformanceObserver can detect requests but can't read response bodies
+              // This is a placeholder for future enhancement with chrome.webRequest API
+              try {
+                const observer = new PerformanceObserver((list) => {
+                  for (const entry of list.getEntries()) {
+                    if (entry.name && (
+                      entry.name.includes('voyager/api/graphql') ||
+                      entry.name.includes('jobs/jobPostings') ||
+                      entry.name.includes('jobPosting')
+                    )) {
+                      console.log('🔍 Detected LinkedIn job-related API request:', entry.name);
+                      // Future: Could use chrome.webRequest API to intercept and parse responses
+                      // For now, this just logs the detection
+                    }
+                  }
+                });
+                
+                observer.observe({ entryTypes: ['resource'] });
+                
+                // Disconnect after 3 seconds
+                setTimeout(() => {
+                  observer.disconnect();
+                }, 3000);
+              } catch (e) {
+                console.log('⚠️ PerformanceObserver not supported for network interception');
+              }
+            }
+            
+            // METHOD 5: Hybrid extraction with validation (existing method)
+            if (!title) {
+              title = extractJobTitleHybrid(document);
+              if (title) {
+                console.log(`✅ Title found via hybrid extraction: "${title}"`);
+              } else {
+                console.log('⚠️ No valid job title found via hybrid extraction');
+              }
+            }
+          }
+          
+          // STEP 3: JOB COMPANY - Jobalytics selectors (reference: lines 85-116)
+          // Note: Jobalytics uses -url not -name
+          if (!company) {
+          console.log('🔍 Searching for company name...');
+            // Priority 1: jobs-details-top-card__company-url (logged-in search/collections)
+            let rawCompany = _text_from_class('jobs-details-top-card__company-url');
+            if (rawCompany) {
+              company = cleanCompanyName(rawCompany);
+              console.log(`✓ Company found (jobs-details-top-card__company-url): "${company}"`);
+            }
+            
+            // Priority 2: jobs-top-card__company-url (direct view pages)
+            if (!company) {
+              rawCompany = _text_from_class('jobs-top-card__company-url');
+              if (rawCompany) {
+                company = cleanCompanyName(rawCompany);
+                console.log(`✓ Company found (jobs-top-card__company-url): "${company}"`);
+              }
+            }
+            
+            // Priority 3: topcard__flavor[0] in details-pane__content (logged-out fallback)
+            if (!company) {
+              try {
+                const detailsPane = document.getElementsByClassName('details-pane__content')[0];
+                if (detailsPane) {
+                  const topcardFlavor = detailsPane.getElementsByClassName('topcard__flavor')[0];
+                  if (topcardFlavor) {
+                    company = cleanCompanyName(topcardFlavor.textContent);
+                    console.log(`✓ Company found (topcard__flavor, logged-out): "${company}"`);
+                  }
+                }
+              } catch (err) {
+                // Fallback failed
+              }
+            }
+            
+            // Priority 4: Current selector as fallback
+            if (!company) {
+              const companyEl = document.querySelector('.job-details-jobs-unified-top-card__company-name a');
+              if (companyEl && companyEl.innerText) {
+                company = cleanCompanyName(companyEl.innerText);
+                console.log(`✓ Company found (unified-top-card fallback): "${company}"`);
+              }
+            }
+            
+            // Priority 5: Other fallback selectors
+          if (!company) {
             const companyFallbacks = [
               '.jobs-unified-top-card__company-name a',
-              'a[data-test-app-aware-link] span',
               '.job-details-jobs-unified-top-card__company-name',
-              '.jobs-unified-top-card__company-name'
+              'a[data-test-app-aware-link]'
             ];
             
             for (const sel of companyFallbacks) {
               const el = document.querySelector(sel);
               if (el && el.innerText && el.innerText.trim().length > 0) {
-                company = el.innerText.split('\n')[0].trim();
-                company = company.replace(/\s+/g, ' ').trim();
-                if (company.length > 0) {
-                  console.log(`✓ Company found via fallback "${sel}": "${company}"`);
-                  break;
+                  company = cleanCompanyName(el.innerText);
+                console.log(`✓ Company found via fallback "${sel}": "${company}"`);
+                break;
                 }
               }
             }
           }
           
-          // Extract Post Date - Look in primary description container
-          const descriptionContainer = document.querySelector('.job-details-jobs-unified-top-card__primary-description-container');
-          if (descriptionContainer) {
-            // Try to find span with 'ago' text
-            const spans = descriptionContainer.querySelectorAll('span');
-            for (const span of spans) {
-              const text = span.innerText || span.textContent || '';
-              if (text.toLowerCase().includes('ago')) {
-                date = text.trim();
-                console.log(`✓ Date found in container: "${date}"`);
+          // STEP 4: JOB POSTED DATE - Enhanced extraction
+          if (!date) {
+          console.log('🔍 Searching for posted date...');
+            
+            // Priority 1: time elements (semantic HTML)
+            const timeEls = document.querySelectorAll('time');
+            for (const timeEl of timeEls) {
+              const timeText = (timeEl.innerText || timeEl.textContent || timeEl.getAttribute('datetime') || '').trim();
+              if (timeText) {
+                date = timeText;
+                console.log(`✓ Date found (time element): "${date}"`);
                 break;
               }
             }
             
-            // If not found, try the 3rd low-emphasis span
+            // Priority 2: tvm__text--low-emphasis spans (LinkedIn's low-emphasis text)
             if (!date) {
-              const lowEmphasisSpans = descriptionContainer.querySelectorAll('.tvm__text--low-emphasis span');
-              if (lowEmphasisSpans.length >= 3) {
-                date = lowEmphasisSpans[2].innerText.trim();
-                console.log(`✓ Date found (3rd span): "${date}"`);
-              }
-            }
-          }
-          
-          // Fallback date selectors if container method fails
-          if (!date) {
-            const dateFallbacks = [
-              '.job-details-jobs-unified-top-card__posted-date',
-              '.jobs-unified-top-card__posted-date',
-              '.tvm__text--low-emphasis span',
-              '[class*="posted-date"]',
-              'time'
-            ];
-            
-            for (const sel of dateFallbacks) {
-              const el = document.querySelector(sel);
-              if (el && el.innerText) {
-                const text = el.innerText.trim();
-                if (text.toLowerCase().includes('ago') || text.toLowerCase().includes('posted')) {
-                  date = text.trim();
-                  console.log(`✓ Date found via fallback "${sel}": "${date}"`);
+              const lowEmphasisSpans = document.querySelectorAll('.tvm__text--low-emphasis span');
+              const dateRegex = /\d+\s+(hour|day|week|month)s?\s+ago|just\s+now|today|yesterday|posted\s+\d+\s+(hour|day|week|month)s?\s+ago/i;
+              for (const span of lowEmphasisSpans) {
+                const text = (span.innerText || span.textContent || '').trim();
+                const match = text.match(dateRegex);
+                if (match) {
+                  date = match[0];
+                  console.log(`✓ Date found (low-emphasis span): "${date}"`);
                   break;
                 }
               }
             }
+            
+            // Priority 3: Search in job card containers
+            if (!date) {
+              const dateRegex = /\d+\s+(hour|day|week|month)s?\s+ago|just\s+now|today|yesterday|posted\s+\d+\s+(hour|day|week|month)s?\s+ago/i;
+              const containers = [
+                '.jobs-details-top-card__primary-description-container',
+                '.jobs-top-card__primary-description',
+                '.job-details-jobs-unified-top-card__primary-description-container'
+              ];
+              
+              for (const containerSel of containers) {
+                const container = document.querySelector(containerSel);
+                if (container) {
+                  const spans = container.querySelectorAll('span');
+            for (const span of spans) {
+              const text = (span.innerText || span.textContent || '').trim();
+              const match = text.match(dateRegex);
+              if (match) {
+                      date = match[0];
+                      console.log(`✓ Date found in container "${containerSel}": "${date}"`);
+                break;
+                    }
+                  }
+                  if (date) break;
+                }
+              }
+            }
+            
+            // Priority 4: Generic search in job card (restricted scope)
+            if (!date) {
+              const dateRegex = /\d+\s+(hour|day|week|month)s?\s+ago|just\s+now|today|yesterday/i;
+              const jobCard = document.querySelector('.jobs-details-top-card, .jobs-top-card, .job-details-jobs-unified-top-card');
+              if (jobCard) {
+                const allElements = jobCard.querySelectorAll('span, time');
+                for (const el of allElements) {
+                  const text = (el.innerText || el.textContent || '').trim();
+                const match = text.match(dateRegex);
+                if (match) {
+                  date = match[0];
+                    console.log(`✓ Date found in job card: "${date}"`);
+                    break;
+                }
+              }
+            }
+          }
+          
+            // Priority 5: Generic fallback (last resort)
+          if (!date) {
+              const dateRegex = /\d+\s+(hour|day|week|month)s?\s+ago|just\s+now|today|yesterday/i;
+            const allElements = document.querySelectorAll('span, time');
+            for (const el of allElements) {
+              const text = (el.innerText || el.textContent || '').trim();
+              const match = text.match(dateRegex);
+              if (match) {
+                date = match[0];
+                  console.log(`✓ Date found via generic search: "${date}"`);
+                break;
+                }
+              }
+            }
+          }
+          
+          // HEURISTIC FALLBACK - If all specific selectors fail, use <main> element
+          if (!title || !company || !date) {
+            console.log('⚠ Some metadata missing, attempting heuristic fallback...');
+            const mainElement = document.querySelector('main');
+            
+            if (mainElement) {
+              const mainText = (mainElement.innerText || mainElement.textContent || '').trim();
+              const lines = mainText.split('\n').filter(line => line.trim().length > 0);
+              
+              // Get first three distinct lines for missing fields
+              const distinctLines = [];
+              for (const line of lines) {
+                const trimmedLine = line.trim();
+                if (trimmedLine.length > 3 && !distinctLines.includes(trimmedLine)) {
+                  distinctLines.push(trimmedLine);
+                  if (distinctLines.length >= 3) break;
+                }
+              }
+              
+              if (!title && distinctLines.length > 0) {
+                // Validate before accepting - try each line until we find a valid one
+                for (const line of distinctLines) {
+                  const validation = isValidJobTitle(line);
+                  if (validation.valid) {
+                    title = line;
+                    console.log(`✅ Title from heuristic fallback (confidence: ${validation.confidence}%): "${title}"`);
+                    break;
+                  } else {
+                    console.log(`❌ Rejected heuristic candidate: "${line}" (${validation.reason})`);
+                  }
+                }
+              }
+              if (!company && distinctLines.length > 1) {
+                company = distinctLines[1];
+                console.log(`✓ Company from heuristic fallback: "${company}"`);
+              }
+              if (!date && distinctLines.length > 2) {
+                date = distinctLines[2];
+                console.log(`✓ Date from heuristic fallback: "${date}"`);
+              }
+            }
+          }
+          
+          // DYNAMIC UI SYNC - Set missing fields to 'Manual Entry Required'
+          if (!title || title.trim() === '') {
+            title = 'Manual Entry Required';
+            console.log('⚠ Title not found - set to Manual Entry Required');
+          }
+          if (!company || company.trim() === '') {
+            company = 'Manual Entry Required';
+            console.log('⚠ Company not found - set to Manual Entry Required');
+          }
+          if (!date || date.trim() === '') {
+            date = 'Manual Entry Required';
+            console.log('⚠ Date not found - set to Manual Entry Required');
+          }
+          
+          // STEP 3: UI SYNC - Update UI elements immediately with cleaned values
+          console.log('🔄 Syncing cleaned metadata to UI elements...');
+          const jobTitleTextEl = document.getElementById('job-title-text');
+          const jobCompanyTextEl = document.getElementById('job-company-text');
+          const jobPostedTextEl = document.getElementById('job-posted-text');
+          
+          if (jobTitleTextEl) {
+            jobTitleTextEl.textContent = title;
+            console.log(`✓ Updated job-title-text: "${title}"`);
+          }
+          if (jobCompanyTextEl) {
+            jobCompanyTextEl.textContent = company;
+            console.log(`✓ Updated job-company-text: "${company}"`);
+          }
+          if (jobPostedTextEl) {
+            jobPostedTextEl.textContent = date;
+            console.log(`✓ Updated job-posted-text: "${date}"`);
           }
           
           console.log('📋 Metadata extraction complete:', { title, company, date, source });
           return { title, company, date, source };
         }
         
+        // Helper: Clean third-party extension noise
+        function cleanExtensionNoise(text) {
+          const thirdPartyArtifacts = [
+            'Jobalytics',
+            'Resume Match',
+            'Increase your match score',
+            'Job Match Score',
+            'Match Rate',
+            'Application Tracker',
+            'Chrome Extension'
+          ];
+          
+          const lines = text.split('\n');
+          const filteredLines = lines.filter(line => {
+            const lowerLine = line.toLowerCase();
+            return !thirdPartyArtifacts.some(artifact => lowerLine.includes(artifact.toLowerCase()));
+          });
+          return filteredLines.join('\n').trim();
+        }
+        
+        // Helper: Find "About the job" semantic anchor and extract metadata from it
+        function findSemanticAnchor() {
+          console.log('🔍 Searching for "About the job" semantic anchor...');
+          
+          // Look for h2, h3, or strong tags with exact text "About the job"
+          const headingSelectors = ['h2', 'h3', 'strong', 'h4'];
+          let anchorElement = null;
+          
+          for (const selector of headingSelectors) {
+            const elements = document.querySelectorAll(selector);
+            for (const el of elements) {
+              const text = (el.innerText || el.textContent || '').trim().toLowerCase();
+              if (text === 'about the job' || text === 'about the role') {
+                anchorElement = el;
+                console.log(`✓ Semantic Anchor Found: "About the job" identified at node [${el.nodeName}]`);
+                break;
+              }
+            }
+            if (anchorElement) break;
+          }
+          
+          return anchorElement;
+        }
+        
+        // STEP 2: Extract metadata using "About the job" as anchor
+        function extractMetadataFromAnchor(anchorElement) {
+          console.log('📋 Extracting metadata using semantic anchor...');
+          
+          let title = '';
+          let company = '';
+          let date = '';
+          
+          // TITLE: Search upwards for nearest h1
+          let currentNode = anchorElement;
+          while (currentNode && currentNode !== document.body && !title) {
+            if (currentNode.nodeName === 'H1') {
+              const candidateTitle = (currentNode.innerText || currentNode.textContent || '').trim();
+              const validation = isValidJobTitle(candidateTitle);
+              if (validation.valid) {
+                title = candidateTitle;
+                console.log(`✅ Title found via upward search (confidence: ${validation.confidence}%): "${title}"`);
+              break;
+              } else {
+                console.log(`❌ Rejected h1 from upward search: "${candidateTitle}" (${validation.reason})`);
+                // Continue searching if invalid
+              }
+            }
+            
+            // Check siblings and parent
+            if (!title) {
+            const h1InParent = currentNode.parentElement?.querySelector('h1');
+            if (h1InParent) {
+                const candidateTitle = (h1InParent.innerText || h1InParent.textContent || '').trim();
+                const validation = isValidJobTitle(candidateTitle);
+                if (validation.valid) {
+                  title = candidateTitle;
+                  console.log(`✅ Title found in parent container (confidence: ${validation.confidence}%): "${title}"`);
+              break;
+                } else {
+                  console.log(`❌ Rejected h1 from parent: "${candidateTitle}" (${validation.reason})`);
+                  // Continue searching if invalid
+                }
+              }
+            }
+            
+            currentNode = currentNode.parentElement;
+          }
+          
+          // COMPANY: Search upwards for first <a> tag that doesn't contain 'jobs'
+          currentNode = anchorElement;
+          let searchDepth = 0;
+          while (currentNode && currentNode !== document.body && searchDepth < 10) {
+            const links = currentNode.querySelectorAll('a');
+            for (const link of links) {
+              const text = (link.innerText || link.textContent || '').trim();
+              const lowerText = text.toLowerCase();
+              if (text.length > 0 && 
+                  !lowerText.includes('jobs') && 
+                  !lowerText.includes('notification') &&
+                  !lowerText.includes('message') &&
+                  text !== title) {
+                company = text.split('\n')[0].trim();
+                console.log(`✓ Company found via anchor search: "${company}"`);
+                break;
+              }
+            }
+            
+            if (company) break;
+            currentNode = currentNode.parentElement;
+            searchDepth++;
+          }
+          
+          // POSTED: Search for span with "ago" within reasonable distance from anchor
+          currentNode = anchorElement;
+          searchDepth = 0;
+          while (currentNode && currentNode !== document.body && searchDepth < 10) {
+            const spans = currentNode.querySelectorAll('span');
+            for (const span of spans) {
+              const text = (span.innerText || span.textContent || '').trim();
+              if (text.toLowerCase().includes('ago') && text.length < 50) {
+                // Verify it's within ~500 pixels (check bounding rect)
+                const anchorRect = anchorElement.getBoundingClientRect();
+                const spanRect = span.getBoundingClientRect();
+                const distance = Math.abs(anchorRect.top - spanRect.top);
+                
+                if (distance < 500) {
+                  date = text;
+                  console.log(`✓ Date found near anchor (${Math.round(distance)}px away): "${date}"`);
+                  break;
+                }
+              }
+            }
+            
+            if (date) break;
+            currentNode = currentNode.parentElement;
+            searchDepth++;
+          }
+          
+          return { title, company, date };
+        }
+        
         // Main extraction function
         async function extractJobDescription() {
+          // #region agent log
+          fetch('http://127.0.0.1:7242/ingest/3b595b84-3d7c-4c26-80fb-96782efb256f',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'sidepanel.js:936',message:'extractJobDescription entry',data:{url:window.location.href,pathname:window.location.pathname,hostname:window.location.hostname,selectorCount:selectors.length},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A'})}).catch(()=>{});
+          // #endregion
+          
           console.log('🎯 Trying to find job description using', selectors.length, 'selectors...');
           
-          // STEP 3: Extract metadata first - renamed to avoid conflicts
-          const finalExtractedData = extractJobMetadata();
+          // #region agent log
+          fetch('http://127.0.0.1:7242/ingest/3b595b84-3d7c-4c26-80fb-96782efb256f',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'sidepanel.js:940',message:'Before waitForElement',data:{selectors:selectors.slice(0,5),iframeCount:document.querySelectorAll('iframe').length,bodyTextLength:document.body.innerText.length},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'B'})}).catch(()=>{});
+          // #endregion
           
           // Try to find element with wait/retry logic
           const result = await waitForElement(selectors);
+          
+          // #region agent log
+          fetch('http://127.0.0.1:7242/ingest/3b595b84-3d7c-4c26-80fb-96782efb256f',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'sidepanel.js:943',message:'After waitForElement',data:{resultFound:!!result,selector:result?.selector,elementTextLength:result?.element?.innerText?.length||0},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'C'})}).catch(()=>{});
+          // #endregion
           
           if (result) {
             const { element, selector } = result;
@@ -536,25 +1927,8 @@ async function getJobDescription() {
               console.log(`⏭ Element skipped due to profile content`);
               // Continue with fallback methods below
             } else {
-              // STEP 2: Clean job scraper noise - remove third-party extension artifacts
-              let cleanedText = text;
-              const thirdPartyArtifacts = [
-                'Jobalytics',
-                'Resume Match',
-                'Increase your match score',
-                'Job Match Score',
-                'Match Rate',
-                'Application Tracker',
-                'Chrome Extension'
-              ];
-              
-              // Remove lines containing third-party artifacts
-              const lines = cleanedText.split('\n');
-              const filteredLines = lines.filter(line => {
-                const lowerLine = line.toLowerCase();
-                return !thirdPartyArtifacts.some(artifact => lowerLine.includes(artifact.toLowerCase()));
-              });
-              cleanedText = filteredLines.join('\n').trim();
+              // STEP 3: Clean job scraper noise
+              let cleanedText = cleanExtensionNoise(text);
               
               // Success! Log detailed extraction info
               const preview = cleanedText.substring(0, 100).replace(/\n/g, ' ');
@@ -563,6 +1937,9 @@ async function getJobDescription() {
               console.log(`✅ Success: Extracted via "${selector}"${hiddenNote}`);
               console.log(`📊 Original length: ${text.length} → Cleaned length: ${cleanedText.length} characters`);
               console.log(`📄 Preview: "${preview}..."`);
+              
+              // Extract metadata using heuristics
+              const finalExtractedData = await extractJobMetadata();
               console.log(`📋 Metadata:`, finalExtractedData);
               
                 return {
@@ -576,31 +1953,113 @@ async function getJobDescription() {
             }
           }
           
-          // STEP 3: Fallback - Look for "About the job" or "About the role" text
-          console.log('🔄 Trying fallback: searching for "About the job" text...');
+          // STEP 1: SEMANTIC ANCHOR FALLBACK - Look for "About the job" heading
+          console.log('🔄 Trying semantic anchor fallback: searching for "About the job"...');
+          const anchorElement = findSemanticAnchor();
+          
+          if (anchorElement) {
+            // Navigate to parent and find next sibling with highest text density
+            const parent = anchorElement.parentElement;
+            let bestCandidate = null;
+            let highestDensity = 0;
+            
+            if (parent) {
+              // Check next siblings
+              let sibling = anchorElement.nextElementSibling;
+              let siblingCount = 0;
+              
+              while (sibling && siblingCount < 5) {
+                const text = (sibling.innerText || sibling.textContent || '').trim();
+                if (text.length > 200 && !isProfileContent(text)) {
+                  if (text.length > highestDensity) {
+                    highestDensity = text.length;
+                    bestCandidate = sibling;
+                  }
+                }
+                sibling = sibling.nextElementSibling;
+                siblingCount++;
+              }
+              
+              // If no good sibling found, try parent's next sibling
+              if (!bestCandidate) {
+                sibling = parent.nextElementSibling;
+                siblingCount = 0;
+                
+                while (sibling && siblingCount < 3) {
+                  const text = (sibling.innerText || sibling.textContent || '').trim();
+                  if (text.length > 200 && !isProfileContent(text)) {
+                    if (text.length > highestDensity) {
+                      highestDensity = text.length;
+                      bestCandidate = sibling;
+                    }
+                  }
+                  sibling = sibling.nextElementSibling;
+                  siblingCount++;
+                }
+              }
+              
+              if (bestCandidate) {
+                let jobText = (bestCandidate.innerText || bestCandidate.textContent || '').trim();
+                
+                // STEP 3: Remove extension noise
+                jobText = cleanExtensionNoise(jobText);
+                
+                console.log('✅ Success: Found via "About the job" semantic anchor');
+                console.log(`📊 Length: ${jobText.length} characters (density: ${highestDensity})`);
+                console.log(`📄 Preview: "${jobText.substring(0, 100)}..."`);
+                
+                // STEP 2: Extract metadata using anchor
+                const anchorMetadata = extractMetadataFromAnchor(anchorElement);
+                const source = window.location.hostname;
+                
+                // Merge with heuristic extraction as fallback
+                const heuristicMetadata = await extractJobMetadata();
+                const finalMetadata = {
+                  title: anchorMetadata.title || heuristicMetadata.title,
+                  company: anchorMetadata.company || heuristicMetadata.company,
+                  date: anchorMetadata.date || heuristicMetadata.date,
+                  source: source
+                };
+                
+                console.log('📋 Metadata (semantic anchor + heuristic):', finalMetadata);
+                
+          return {
+                    text: jobText,
+                    selector: 'semantic-anchor (About the job)',
+                    length: jobText.length,
+                    hasHiddenContent: false,
+                    preview: jobText.substring(0, 100),
+                    metadata: finalMetadata
+                  };
+              }
+            }
+          }
+          
+          // Legacy fallback for other semantic markers
+          console.log('🔄 Trying legacy fallback: searching for job description markers...');
           const allElements = document.querySelectorAll('div, section, article');
           
           for (const el of allElements) {
             const textContent = (el.textContent || '').trim();
-            if (textContent.toLowerCase().includes('about the job') || 
-                textContent.toLowerCase().includes('about the role') ||
-                textContent.toLowerCase().includes('job description')) {
+            if (textContent.toLowerCase().includes('job description')) {
               
               // Try to get parent or parent's siblings
               const parent = el.parentElement;
               if (parent) {
                 const parentText = (parent.innerText || parent.textContent || '').trim();
                 if (parentText.length > 200 && !isProfileContent(parentText)) {
-                  console.log('✅ Success: Found via "About the job" fallback');
-                  console.log(`📊 Length: ${parentText.length} characters`);
-                  console.log(`📄 Preview: "${parentText.substring(0, 100)}..."`);
+                  const cleanedText = cleanExtensionNoise(parentText);
+                  console.log('✅ Success: Found via legacy "job description" fallback');
+                  console.log(`📊 Length: ${cleanedText.length} characters`);
+                  console.log(`📄 Preview: "${cleanedText.substring(0, 100)}..."`);
                   
+                  const finalExtractedData = await extractJobMetadata();
           return {
-                    text: parentText,
-                    selector: 'fallback (About the job)',
-                    length: parentText.length,
+                    text: cleanedText,
+                    selector: 'fallback (job description)',
+                    length: cleanedText.length,
                     hasHiddenContent: false,
-                    preview: parentText.substring(0, 100),
+                    preview: cleanedText.substring(0, 100),
                     metadata: finalExtractedData
                   };
                 }
@@ -608,8 +2067,90 @@ async function getJobDescription() {
             }
           }
           
-          // STEP 4: If all else fails, log body content for debugging
+          // STEP 4: Check iframes for LinkedIn collections pages AND search results pages (reference: Jobalytics crawler.js)
+          if (needsIframeCheck) {
+            const pageType = isCollectionsPage ? 'collections' : 'search results';
+            console.log(`🔄 Checking iframes for ${pageType} page...`);
+            
+            // Wait for iframe to load on search results pages
+            if (isSearchResultsPage) {
+              console.log('⏳ Waiting for iframe content to load (search results page)...');
+              await new Promise(resolve => setTimeout(resolve, 1500));
+            }
+            
+            const iframes = document.querySelectorAll('iframe');
+            
+            // #region agent log
+            const iframeInfo = Array.from(iframes).map(iframe => ({
+              src: iframe.src || 'no-src',
+              id: iframe.id || 'no-id',
+              className: iframe.className || 'no-class',
+              hasContent: !!iframe.contentDocument
+            }));
+            fetch('http://127.0.0.1:7242/ingest/3b595b84-3d7c-4c26-80fb-96782efb256f',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'sidepanel.js:1095',message:`Checking iframes for ${pageType} page`,data:{iframeCount:iframes.length,iframes:iframeInfo.slice(0,3),isCollectionsPage,isSearchResultsPage},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'H'})}).catch(()=>{});
+            // #endregion
+            
+            // Reference: Jobalytics crawler.js lines 66-74 - handles Indeed iframe
+            // For LinkedIn collections, check iframe with id="vjs-container-iframe" or similar
+            for (const iframe of iframes) {
+              try {
+                const iframeDoc = iframe.contentDocument || iframe.contentWindow?.document;
+                if (iframeDoc) {
+                  // Try selectors inside iframe (reference: Jobalytics)
+                  const iframeSelectors = [
+                    '#job-details',
+                    '.jobs-description__content',
+                    '.jobs-description-content__text',
+                    '.jobsearch-JobComponent-embeddedBody', // Indeed pattern
+                    '.jobs-description',
+                    '[class*="job-description"]'
+                  ];
+                  
+                  for (const selector of iframeSelectors) {
+                    const iframeElement = iframeDoc.querySelector(selector);
+                    if (iframeElement) {
+                      const iframeText = (iframeElement.innerText || iframeElement.textContent || '').trim();
+                      if (iframeText.length > 100 && !isProfileContent(iframeText)) {
+                        // #region agent log
+                        fetch('http://127.0.0.1:7242/ingest/3b595b84-3d7c-4c26-80fb-96782efb256f',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'sidepanel.js:1120',message:'Found job description in iframe',data:{selector,textLength:iframeText.length},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'I'})}).catch(()=>{});
+                        // #endregion
+                        const cleanedText = cleanExtensionNoise(iframeText);
+                        const finalExtractedData = await extractJobMetadata();
+                        return {
+                          text: cleanedText,
+                          selector: `iframe:${selector}`,
+                          length: cleanedText.length,
+                          hasHiddenContent: false,
+                          preview: cleanedText.substring(0, 100),
+                          metadata: finalExtractedData
+                        };
+                      }
+                    }
+                  }
+                }
+              } catch (e) {
+                // Cross-origin iframe, can't access - log it
+                // #region agent log
+                fetch('http://127.0.0.1:7242/ingest/3b595b84-3d7c-4c26-80fb-96782efb256f',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'sidepanel.js:1135',message:'Iframe access blocked (cross-origin)',data:{error:e.message},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'J'})}).catch(()=>{});
+                // #endregion
+              }
+            }
+          }
+          
+          // STEP 5: If all else fails, log body content for debugging
           console.error('❌ All extraction methods failed');
+          
+          // #region agent log
+          const iframes = Array.from(document.querySelectorAll('iframe')).map(iframe => ({
+            src: iframe.src || 'no-src',
+            id: iframe.id || 'no-id',
+            className: iframe.className || 'no-class'
+          }));
+          const collectionsPageCheck = window.location.pathname.includes('/collections/');
+          const jobViewCheck = window.location.pathname.includes('/view/') || window.location.pathname.includes('/jobs/view/');
+          fetch('http://127.0.0.1:7242/ingest/3b595b84-3d7c-4c26-80fb-96782efb256f',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'sidepanel.js:1130',message:'All extraction methods failed',data:{url:window.location.href,pathname:window.location.pathname,isCollectionsPage:collectionsPageCheck,isJobView:jobViewCheck,iframeCount:iframes.length,iframes:iframes.slice(0,3),bodyTextLength:document.body.innerText.length,bodyPreview:document.body.innerText.substring(0,200)},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'G'})}).catch(()=>{});
+          // #endregion
+          
           const bodyPreview = (document.body.innerText || '').substring(0, 500);
           console.log('🔍 DEBUG - First 500 characters of body:', bodyPreview);
           
@@ -621,6 +2162,9 @@ async function getJobDescription() {
           } else if (bodyPreview.length < 50) {
             console.error('⚠ Page appears to be loading or empty');
         }
+        
+        // Extract metadata even on failure
+        const finalExtractedData = await extractJobMetadata();
         
         return {
           text: '[ERROR] No job description found on this page.',
@@ -887,6 +2431,233 @@ function readResumeFile(file) {
   });
 }
 
+// Highlight keywords in job description
+// Reference: Jobalytics highlightKeywords.js
+function highlightKeywordsInDescription(matchedKeywords, unmatchedKeywords, descriptionElement) {
+  if (!descriptionElement || !descriptionElement.textContent) {
+    console.log('⚠ No description element or content to highlight');
+    return;
+  }
+  
+  if ((!matchedKeywords || matchedKeywords.length === 0) && 
+      (!unmatchedKeywords || unmatchedKeywords.length === 0)) {
+    console.log('⚠ No keywords to highlight');
+    return;
+  }
+  
+  let text = descriptionElement.textContent;
+  
+  // Sort keywords by length (longest first) to avoid partial matches
+  // Reference: Jobalytics line 34
+  const sortedMatched = [...(matchedKeywords || [])].sort((a, b) => b.length - a.length);
+  const sortedUnmatched = [...(unmatchedKeywords || [])].sort((a, b) => b.length - a.length);
+  
+  // Track which positions have been highlighted to avoid double-highlighting
+  const highlightedRanges = [];
+  
+  // Helper: Check if a position range overlaps with already highlighted ranges
+  function isOverlapping(start, end) {
+    return highlightedRanges.some(range => {
+      return (start >= range.start && start < range.end) ||
+             (end > range.start && end <= range.end) ||
+             (start <= range.start && end >= range.end);
+    });
+  }
+  
+  // Helper: Add range to highlighted list
+  function addRange(start, end) {
+    highlightedRanges.push({ start, end });
+    highlightedRanges.sort((a, b) => a.start - b.start);
+  }
+  
+  // Helper: Generate keyword variations (suffixes, spaces, dashes)
+  // Reference: Jobalytics with_keyword_variations() lines 45-63
+  function getKeywordVariations(keyword) {
+    const variations = [keyword];
+    const lowerKeyword = keyword.toLowerCase();
+    
+    // Suffix variations: ing, ed, d, s
+    // Reference: Jobalytics line 84
+    const suffixes = ['ing', 'ed', 'd', 's'];
+    suffixes.forEach(suffix => {
+      if (!lowerKeyword.endsWith(suffix)) {
+        variations.push(keyword + suffix);
+        variations.push(lowerKeyword + suffix);
+      }
+    });
+    
+    // Space variations: "user research" → "user-research", "userresearch"
+    if (keyword.includes(' ')) {
+      variations.push(keyword.replace(/\s+/g, '-'));
+      variations.push(keyword.replace(/\s+/g, ''));
+      variations.push(lowerKeyword.replace(/\s+/g, '-'));
+      variations.push(lowerKeyword.replace(/\s+/g, ''));
+    }
+    
+    // Dash variations: "user-research" → "user research", "userresearch"
+    if (keyword.includes('-')) {
+      variations.push(keyword.replace(/-/g, ' '));
+      variations.push(keyword.replace(/-/g, ''));
+      variations.push(lowerKeyword.replace(/-/g, ' '));
+      variations.push(lowerKeyword.replace(/-/g, ''));
+    }
+    
+    // Case variations
+    variations.push(keyword.toLowerCase());
+    variations.push(keyword.toUpperCase());
+    if (keyword.length > 0) {
+      variations.push(keyword[0].toUpperCase() + keyword.slice(1).toLowerCase());
+    }
+    
+    return [...new Set(variations)];
+  }
+  
+  // Helper: Escape special regex characters
+  function escapeRegex(str) {
+    return str.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  }
+  
+  // Helper: Escape HTML to prevent XSS
+  function escapeHTML(str) {
+    const div = document.createElement('div');
+    div.textContent = str;
+    return div.innerHTML;
+  }
+  
+  // Helper: Create regex pattern for keyword matching
+  // Reference: Jobalytics highlight_single_elm() lines 87-140
+  function createKeywordPattern(keyword) {
+    const escaped = escapeRegex(keyword);
+    // Handle multi-word keywords with flexible spacing/hyphenation
+    if (keyword.includes(' ') || keyword.includes('-')) {
+      const parts = escaped.split(/[\s-]+/);
+      const flexiblePattern = parts.join('[\\s-]+');
+      // Word boundaries for multi-word phrases
+      return new RegExp(`(?:^|[^a-zA-Z0-9])(${flexiblePattern})(?:$|[^a-zA-Z0-9])`, 'gi');
+    } else {
+      // Single word with word boundaries
+      return new RegExp(`(?:^|[^a-zA-Z0-9])(${escaped})(?:$|[^a-zA-Z0-9])`, 'gi');
+    }
+  }
+  
+  // Helper: Escape HTML to prevent XSS
+  function escapeHTML(str) {
+    const div = document.createElement('div');
+    div.textContent = str;
+    return div.innerHTML;
+  }
+  
+  // Collect all matches with their positions
+  const allMatches = [];
+  
+  // Process matched keywords (green)
+  sortedMatched.forEach(keyword => {
+    const variations = getKeywordVariations(keyword);
+    variations.forEach(variation => {
+      const pattern = createKeywordPattern(variation);
+      let match;
+      // Reset lastIndex before each search
+      pattern.lastIndex = 0;
+      while ((match = pattern.exec(text)) !== null) {
+        // match[0] is the full match including word boundaries
+        // match[1] is the captured keyword group
+        // Find where match[1] starts within match[0]
+        const fullMatch = match[0];
+        const keywordMatch = match[1];
+        const offsetInFullMatch = fullMatch.indexOf(keywordMatch);
+        const start = match.index + offsetInFullMatch;
+        const end = start + keywordMatch.length;
+        
+        if (!isOverlapping(start, end) && start >= 0 && end <= text.length) {
+          allMatches.push({
+            start,
+            end,
+            keyword: keywordMatch,
+            isMatched: true
+          });
+        }
+      }
+    });
+  });
+  
+  // Process unmatched keywords (yellow)
+  sortedUnmatched.forEach(keyword => {
+    const variations = getKeywordVariations(keyword);
+    variations.forEach(variation => {
+      const pattern = createKeywordPattern(variation);
+      let match;
+      // Reset lastIndex before each search
+      pattern.lastIndex = 0;
+      while ((match = pattern.exec(text)) !== null) {
+        // match[0] is the full match including word boundaries
+        // match[1] is the captured keyword group
+        // Find where match[1] starts within match[0]
+        const fullMatch = match[0];
+        const keywordMatch = match[1];
+        const offsetInFullMatch = fullMatch.indexOf(keywordMatch);
+        const start = match.index + offsetInFullMatch;
+        const end = start + keywordMatch.length;
+        
+        if (!isOverlapping(start, end) && start >= 0 && end <= text.length) {
+          allMatches.push({
+            start,
+            end,
+            keyword: keywordMatch,
+            isMatched: false
+          });
+        }
+      }
+    });
+  });
+  
+  // Sort matches by start position, then by length (longest first for same start)
+  allMatches.sort((a, b) => {
+    if (a.start !== b.start) return a.start - b.start;
+    return b.end - a.end; // Longer matches first
+  });
+  
+  // Remove overlapping matches (keep first/longest)
+  const nonOverlappingMatches = [];
+  for (const match of allMatches) {
+    if (!isOverlapping(match.start, match.end)) {
+      nonOverlappingMatches.push(match);
+      addRange(match.start, match.end);
+    }
+  }
+  
+  // Build highlighted HTML
+  let highlightedHTML = '';
+  let lastIndex = 0;
+  
+  for (const match of nonOverlappingMatches) {
+    // Add text before match
+    if (match.start > lastIndex) {
+      const beforeText = text.substring(lastIndex, match.start);
+      highlightedHTML += escapeHTML(beforeText);
+    }
+    
+    // Add highlighted match
+    const matchText = text.substring(match.start, match.end);
+    const className = match.isMatched ? 'keyword-matched' : 'keyword-unmatched';
+    highlightedHTML += `<span class="${className}">${escapeHTML(matchText)}</span>`;
+    
+    lastIndex = match.end;
+  }
+  
+  // Add remaining text
+  if (lastIndex < text.length) {
+    highlightedHTML += escapeHTML(text.substring(lastIndex));
+  }
+  
+  // Replace element content with highlighted version
+  // Preserve white-space: pre-line styling
+  descriptionElement.innerHTML = highlightedHTML;
+  
+  const matchedCount = nonOverlappingMatches.filter(m => m.isMatched).length;
+  const unmatchedCount = nonOverlappingMatches.filter(m => !m.isMatched).length;
+  console.log(`✓ Highlighted ${matchedCount} matched and ${unmatchedCount} unmatched keywords`);
+}
+
 // Update UI with analysis results
 function updateUI(analysis) {
   // Clear previous keywords grid at the very beginning to prevent old hardcoded tags
@@ -921,65 +2692,96 @@ function updateUI(analysis) {
     ${analysis.matchedCount}/${analysis.totalKeywords}
   `;
   
-  // STEP 2: Update Detected Job section with real data
+  // STEP 1: Update Detected Job section with real data from currentJobMetadata
+  console.log('📋 Updating UI with metadata:', currentJobMetadata);
+  
+  // Get all job-related elements (both in main view and edit view)
   const jobTitleEl = document.getElementById('job-title-text');
   const jobCompanyEl = document.getElementById('job-company-text');
   const jobSourceEl = document.getElementById('job-source-text');
   const jobPostedEl = document.getElementById('job-posted-text');
   const jobDescriptionEl = document.getElementById('job-description-full');
   
-  // Also update main view job card
   const jobTitleMainEl = document.getElementById('job-title-main');
   const jobMetaMainEl = document.getElementById('job-meta-main');
   const jobDateMainEl = document.getElementById('job-date-main');
   const jobIconEl = document.getElementById('job-icon');
   
-  // Update job view (Edit page)
+  // STEP 1: Update Job Edit View (job-view) - ensure fields are populated
   if (jobTitleEl) {
     jobTitleEl.textContent = currentJobMetadata.title || 'Job Title Not Found';
+    console.log('✓ Updated job-title-text:', jobTitleEl.textContent);
   }
   if (jobCompanyEl) {
     jobCompanyEl.textContent = currentJobMetadata.company || 'Company Not Found';
+    console.log('✓ Updated job-company-text:', jobCompanyEl.textContent);
   }
   if (jobSourceEl) {
     jobSourceEl.textContent = currentJobMetadata.source || 'Unknown Source';
+    console.log('✓ Updated job-source-text:', jobSourceEl.textContent);
   }
   if (jobPostedEl) {
     jobPostedEl.textContent = currentJobMetadata.date || 'Date Unknown';
+    console.log('✓ Updated job-posted-text:', jobPostedEl.textContent);
   }
   if (jobDescriptionEl) {
+    // Set text content first
     jobDescriptionEl.textContent = currentJobDescription || 'No description available';
+    console.log('✓ Updated job-description-full, length:', (currentJobDescription || '').length);
+    
+    // Highlight keywords in job description
+    if (currentJobDescription && analysis) {
+      highlightKeywordsInDescription(
+        analysis.matchedKeywords || [],
+        analysis.unmatchedKeywords || [],
+        jobDescriptionEl
+      );
+    }
   }
   
-  // Update main view job card
+  // STEP 1: Update Main View Job Card - ensure fields are populated in real-time
   if (jobTitleMainEl) {
     jobTitleMainEl.textContent = currentJobMetadata.title || 'Job Title Not Found';
+    console.log('✓ Updated job-title-main:', jobTitleMainEl.textContent);
   }
   if (jobMetaMainEl) {
-    const source = currentJobMetadata.source ? currentJobMetadata.source.replace('www.', '').replace('.com', '') : 'Unknown';
+    // STEP 2: Clean and format source name
+    let source = currentJobMetadata.source || 'Unknown';
+    source = source.replace('www.', '').replace('.com', '');
+    // Capitalize first letter for display
+    source = source.charAt(0).toUpperCase() + source.slice(1);
+    
     const company = currentJobMetadata.company || 'Company Unknown';
     jobMetaMainEl.textContent = `${source} • ${company}`;
+    console.log('✓ Updated job-meta-main:', jobMetaMainEl.textContent);
   }
   if (jobDateMainEl) {
     jobDateMainEl.textContent = currentJobMetadata.date || 'Date Unknown';
+    console.log('✓ Updated job-date-main:', jobDateMainEl.textContent);
   }
   if (jobIconEl) {
     // Set icon based on source
-    const source = currentJobMetadata.source || '';
+    const source = (currentJobMetadata.source || '').toLowerCase();
     if (source.includes('linkedin')) {
       jobIconEl.textContent = 'LI';
       jobIconEl.style.backgroundColor = '#0077B5';
+      console.log('✓ Updated job-icon: LinkedIn');
     } else if (source.includes('indeed')) {
       jobIconEl.textContent = 'IN';
       jobIconEl.style.backgroundColor = '#2164f3';
+      console.log('✓ Updated job-icon: Indeed');
     } else if (source.includes('glassdoor')) {
       jobIconEl.textContent = 'GD';
       jobIconEl.style.backgroundColor = '#0caa41';
+      console.log('✓ Updated job-icon: Glassdoor');
     } else {
       jobIconEl.textContent = source.substring(0, 2).toUpperCase() || 'JB';
       jobIconEl.style.backgroundColor = '#6b7280';
+      console.log('✓ Updated job-icon: Generic');
     }
   }
+  
+  console.log('✅ UI update complete - all job metadata fields updated');
   
   // Add unmatched keywords first (yellow - all the same)
   analysis.unmatchedKeywords.forEach(keyword => {
@@ -1373,7 +3175,11 @@ window.addEventListener('DOMContentLoaded', async () => {
   loadedKeywords = keywordData.allKeywords;
   loadedTechKeywords = keywordData.techKeywords;
   loadedSoftKeywords = keywordData.softKeywords;
+  loadedSweKeywords = keywordData.sweKeywords;
+  loadedPmMarketingKeywords = keywordData.pmMarketingKeywords;
+  loadedDesignKeywords = keywordData.designKeywords;
   console.log('✓ Keywords loaded successfully:', loadedKeywords.length, 'keywords');
+  console.log('  Domain-specific lists: SWE=' + loadedSweKeywords.length + ', PM/Marketing=' + loadedPmMarketingKeywords.length + ', Design=' + loadedDesignKeywords.length);
   
   // Step 2: Load saved resume from chrome.storage.local
   console.log('Step 2: Loading saved resume from storage...');
