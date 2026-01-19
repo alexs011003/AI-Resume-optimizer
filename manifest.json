@@ -12,7 +12,10 @@
   ],
   "host_permissions": [
     "https://www.linkedin.com/*",
-    "https://www.indeed.com/*"
+    "https://www.indeed.com/*",
+    "https://api.openai.com/*",
+    "https://api.anthropic.com/*",
+    "https://generativelanguage.googleapis.com/*"
   ],
   "action": {
     "default_title": "Open Resume Optimizer"

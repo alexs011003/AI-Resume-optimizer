@@ -4,6 +4,8 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Resume Optimizer</title>
+  <link href="https://fonts.googleapis.com/css2?family=Varela+Round&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.13.1/font/bootstrap-icons.min.css">
   <link rel="stylesheet" href="sidepanel.css">
 </head>
 <body>
@@ -11,22 +13,20 @@
     <div class="header-content">
       <div class="header-left">
         <div class="header-icon">
-          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-            <path d="M12 2L2 7L12 12L22 7L12 2Z" fill="#2B7FFF"/>
-            <path d="M2 17L12 22L22 17V12L12 17L2 12V17Z" fill="#2B7FFF"/>
-          </svg>
+          <img src="logo.svg" alt="Resume Optimizer Logo" class="logo-svg" />
         </div>
         <div class="header-title">
           <h1>Resume Optimizer</h1>
-          <p class="subtitle">Resume Analyzer v2.1</p>
         </div>
       </div>
-      <button class="close-btn" aria-label="Close side panel" id="close-btn">
-        <svg width="20" height="20" viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg">
-          <path d="M15 5L5 15" stroke="#4A5565" stroke-width="1.66667" stroke-linecap="round" stroke-linejoin="round"/>
-          <path d="M5 5L15 15" stroke="#4A5565" stroke-width="1.66667" stroke-linecap="round" stroke-linejoin="round"/>
-        </svg>
-      </button>
+      <div class="header-right">
+        <button class="settings-btn" aria-label="Open settings" id="settings-btn" title="Settings">
+          <i class="bi bi-gear" style="font-size: 20px; color: #4A5565;"></i>
+        </button>
+        <button class="close-btn" aria-label="Close side panel" id="close-btn">
+          <i class="bi bi-x-lg" style="font-size: 20px; color: #4A5565;"></i>
+        </button>
+      </div>
     </div>
   </header>
   
@@ -41,44 +41,41 @@
     <main>
       <!-- Resume Match Score Section -->
       <section class="score-section">
-        <div class="score-header">
-        <div class="score-title-wrapper">
-          <h2>Resume Match Score</h2>
-          <button class="refresh-btn" aria-label="Refresh score" title="Re-evaluate resume" id="refresh-btn">
-            <svg width="15" height="15" viewBox="0 0 12.5 12.5" fill="none" xmlns="http://www.w3.org/2000/svg">
-              <path d="M2.5 6.25C2.5 4.17893 4.17893 2.5 6.25 2.5C7.5 2.5 8.625 3.125 9.375 4.0625" stroke="#4A5565" stroke-width="1.25" stroke-linecap="round" stroke-linejoin="round"/>
-              <path d="M1.875 1.875V4.375H4.375" stroke="#4A5565" stroke-width="1.25" stroke-linecap="round" stroke-linejoin="round"/>
-              <path d="M9.75 6.25C9.75 8.32107 8.07107 10 6 10C4.75 10 3.625 9.375 2.875 8.4375" stroke="#4A5565" stroke-width="1.25" stroke-linecap="round" stroke-linejoin="round"/>
-              <path d="M10.625 10.625V8.125H8.125" stroke="#4A5565" stroke-width="1.25" stroke-linecap="round" stroke-linejoin="round"/>
-            </svg>
-          </button>
-        </div>
-          <div class="score-number" id="score-number">68</div>
-        </div>
-        <div class="progress-bar-container">
-          <div class="progress-bar">
-            <div class="progress-bg-left"></div>
-            <div class="progress-bg-right"></div>
-            <div class="progress-fill" id="progress-fill" style="width: 68%"></div>
+        <div class="score-content">
+          <div class="score-text">
+            <h2>Resume Match Score</h2>
+            <p class="score-description">
+              Your resume has <strong>17 out of 25 (68%)</strong> keywords that appear in the job description.
+            </p>
+          </div>
+          <div class="score-gauge-container">
+            <div class="score-gauge" id="score-gauge">
+              <div role="progressbar" aria-valuenow="68" aria-valuemin="0" aria-valuemax="100" id="progress-bar" style="--value: 68"></div>
+              <div class="score-number-large" id="score-number">68</div>
+            </div>
+            <div class="score-info-tip">
+              <i class="bi bi-lightbulb" style="font-size: 14px; color: #6B7280;"></i>
+              <span>Score above 70% to increase your chances!</span>
+            </div>
           </div>
         </div>
-        <p class="score-description">
-          Your resume has <strong>17 out of 25 (68%)</strong> keywords that appear in the job description.
-        </p>
       </section>
 
-      <!-- Keywords Analysis Section -->
-      <section class="keywords-section">
-        <div class="section-header">
-          <h2>Keywords Analysis</h2>
-          <span class="keyword-count">
-            <svg width="12" height="12" viewBox="0 0 12 12" fill="none" xmlns="http://www.w3.org/2000/svg">
-              <path d="M10 2.5L4.5 8L2 5.5" stroke="#6b7280" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
-            </svg>
-            17/25
-          </span>
+      <!-- Missing Keywords Section -->
+      <section class="keywords-section collapsible-section collapsed">
+        <div class="section-header collapsible-header" id="missing-keywords-header">
+          <div class="section-header-left">
+            <div class="section-icon missing-icon">
+              <i class="bi bi-exclamation-circle-fill" style="font-size: 16px; color: #F59E0B;"></i>
+            </div>
+            <h2>Missing Keywords</h2>
+          </div>
+          <button class="collapse-toggle" aria-label="Toggle section">
+            <i class="bi bi-chevron-up" style="font-size: 14px; color: #6B7280;"></i>
+          </button>
         </div>
-        <div class="keywords-grid">
+        <div class="keywords-content" id="missing-keywords-content">
+          <div class="keywords-grid" id="missing-keywords-grid">
           <span class="keyword-tag unmatched" data-keyword="Python">Python</span>
           <span class="keyword-tag unmatched" data-keyword="Machine Learning">Machine Learning</span>
           <span class="keyword-tag unmatched" data-keyword="AWS">AWS</span>
@@ -87,115 +84,48 @@
           <span class="keyword-tag unmatched" data-keyword="CI/CD">CI/CD</span>
           <span class="keyword-tag unmatched" data-keyword="Agile">Agile</span>
           <span class="keyword-tag unmatched" data-keyword="REST API">REST API</span>
-          <span class="keyword-tag matched">
-            <svg class="checkmark" width="14" height="14" viewBox="0 0 14 14" fill="none" xmlns="http://www.w3.org/2000/svg">
-              <path d="M11.6667 3.5L5.25 10L2.33333 7" stroke="#008236" stroke-width="1.45833" stroke-linecap="round" stroke-linejoin="round"/>
-            </svg>
-            JavaScript
-          </span>
-          <span class="keyword-tag matched">
-            <svg class="checkmark" width="14" height="14" viewBox="0 0 14 14" fill="none" xmlns="http://www.w3.org/2000/svg">
-              <path d="M11.6667 3.5L5.25 10L2.33333 7" stroke="#008236" stroke-width="1.45833" stroke-linecap="round" stroke-linejoin="round"/>
-            </svg>
-            React
-          </span>
-          <span class="keyword-tag matched">
-            <svg class="checkmark" width="14" height="14" viewBox="0 0 14 14" fill="none" xmlns="http://www.w3.org/2000/svg">
-              <path d="M11.6667 3.5L5.25 10L2.33333 7" stroke="#008236" stroke-width="1.45833" stroke-linecap="round" stroke-linejoin="round"/>
-            </svg>
-            TypeScript
-          </span>
-          <span class="keyword-tag matched">
-            <svg class="checkmark" width="14" height="14" viewBox="0 0 14 14" fill="none" xmlns="http://www.w3.org/2000/svg">
-              <path d="M11.6667 3.5L5.25 10L2.33333 7" stroke="#008236" stroke-width="1.45833" stroke-linecap="round" stroke-linejoin="round"/>
-            </svg>
-            Node.js
-          </span>
-          <span class="keyword-tag matched">
-            <svg class="checkmark" width="14" height="14" viewBox="0 0 14 14" fill="none" xmlns="http://www.w3.org/2000/svg">
-              <path d="M11.6667 3.5L5.25 10L2.33333 7" stroke="#008236" stroke-width="1.45833" stroke-linecap="round" stroke-linejoin="round"/>
-            </svg>
-            Git
-          </span>
-          <span class="keyword-tag matched">
-            <svg class="checkmark" width="14" height="14" viewBox="0 0 14 14" fill="none" xmlns="http://www.w3.org/2000/svg">
-              <path d="M11.6667 3.5L5.25 10L2.33333 7" stroke="#008236" stroke-width="1.45833" stroke-linecap="round" stroke-linejoin="round"/>
-            </svg>
-            SQL
-          </span>
-          <span class="keyword-tag matched">
-            <svg class="checkmark" width="14" height="14" viewBox="0 0 14 14" fill="none" xmlns="http://www.w3.org/2000/svg">
-              <path d="M11.6667 3.5L5.25 10L2.33333 7" stroke="#008236" stroke-width="1.45833" stroke-linecap="round" stroke-linejoin="round"/>
-            </svg>
-            MongoDB
-          </span>
-          <span class="keyword-tag matched">
-            <svg class="checkmark" width="14" height="14" viewBox="0 0 14 14" fill="none" xmlns="http://www.w3.org/2000/svg">
-              <path d="M11.6667 3.5L5.25 10L2.33333 7" stroke="#008236" stroke-width="1.45833" stroke-linecap="round" stroke-linejoin="round"/>
-            </svg>
-            HTML/CSS
-          </span>
-          <span class="keyword-tag matched">
-            <svg class="checkmark" width="14" height="14" viewBox="0 0 14 14" fill="none" xmlns="http://www.w3.org/2000/svg">
-              <path d="M11.6667 3.5L5.25 10L2.33333 7" stroke="#008236" stroke-width="1.45833" stroke-linecap="round" stroke-linejoin="round"/>
-            </svg>
-            Redux
-          </span>
-          <span class="keyword-tag matched">
-            <svg class="checkmark" width="14" height="14" viewBox="0 0 14 14" fill="none" xmlns="http://www.w3.org/2000/svg">
-              <path d="M11.6667 3.5L5.25 10L2.33333 7" stroke="#008236" stroke-width="1.45833" stroke-linecap="round" stroke-linejoin="round"/>
-            </svg>
-            Testing
-          </span>
-          <span class="keyword-tag matched">
-            <svg class="checkmark" width="14" height="14" viewBox="0 0 14 14" fill="none" xmlns="http://www.w3.org/2000/svg">
-              <path d="M11.6667 3.5L5.25 10L2.33333 7" stroke="#008236" stroke-width="1.45833" stroke-linecap="round" stroke-linejoin="round"/>
-            </svg>
-            Webpack
-          </span>
-          <span class="keyword-tag matched">
-            <svg class="checkmark" width="14" height="14" viewBox="0 0 14 14" fill="none" xmlns="http://www.w3.org/2000/svg">
-              <path d="M11.6667 3.5L5.25 10L2.33333 7" stroke="#008236" stroke-width="1.45833" stroke-linecap="round" stroke-linejoin="round"/>
-            </svg>
-            GraphQL
-          </span>
-          <span class="keyword-tag matched">
-            <svg class="checkmark" width="14" height="14" viewBox="0 0 14 14" fill="none" xmlns="http://www.w3.org/2000/svg">
-              <path d="M11.6667 3.5L5.25 10L2.33333 7" stroke="#008236" stroke-width="1.45833" stroke-linecap="round" stroke-linejoin="round"/>
-            </svg>
-            Express
-          </span>
-          <span class="keyword-tag matched">
-            <svg class="checkmark" width="14" height="14" viewBox="0 0 14 14" fill="none" xmlns="http://www.w3.org/2000/svg">
-              <path d="M11.6667 3.5L5.25 10L2.33333 7" stroke="#008236" stroke-width="1.45833" stroke-linecap="round" stroke-linejoin="round"/>
-            </svg>
-            Tailwind CSS
-          </span>
-          <span class="keyword-tag matched">
-            <svg class="checkmark" width="14" height="14" viewBox="0 0 14 14" fill="none" xmlns="http://www.w3.org/2000/svg">
-              <path d="M11.6667 3.5L5.25 10L2.33333 7" stroke="#008236" stroke-width="1.45833" stroke-linecap="round" stroke-linejoin="round"/>
-            </svg>
-            Next.js
-          </span>
-          <span class="keyword-tag matched">
-            <svg class="checkmark" width="14" height="14" viewBox="0 0 14 14" fill="none" xmlns="http://www.w3.org/2000/svg">
-              <path d="M11.6667 3.5L5.25 10L2.33333 7" stroke="#008236" stroke-width="1.45833" stroke-linecap="round" stroke-linejoin="round"/>
-            </svg>
-            PostgreSQL
-          </span>
-          <span class="keyword-tag matched">
-            <svg class="checkmark" width="14" height="14" viewBox="0 0 14 14" fill="none" xmlns="http://www.w3.org/2000/svg">
-              <path d="M11.6667 3.5L5.25 10L2.33333 7" stroke="#008236" stroke-width="1.45833" stroke-linecap="round" stroke-linejoin="round"/>
-            </svg>
-            Scrum
-          </span>
+          </div>
+        </div>
+      </section>
+
+      <!-- Detected Keywords Section -->
+      <section class="keywords-section collapsible-section collapsed">
+        <div class="section-header collapsible-header" id="detected-keywords-header">
+          <div class="section-header-left">
+            <div class="section-icon detected-icon">
+              <i class="bi bi-check-circle-fill" style="font-size: 16px; color: #10B981;"></i>
+            </div>
+            <h2>Detected Keywords</h2>
+          </div>
+          <button class="collapse-toggle" aria-label="Toggle section">
+            <i class="bi bi-chevron-up" style="font-size: 14px; color: #6B7280;"></i>
+          </button>
+        </div>
+        <div class="keywords-content" id="detected-keywords-content">
+          <div class="keywords-grid" id="detected-keywords-grid">
+          <span class="keyword-tag matched">JavaScript</span>
+          <span class="keyword-tag matched">React</span>
+          <span class="keyword-tag matched">TypeScript</span>
+          <span class="keyword-tag matched">Node.js</span>
+          <span class="keyword-tag matched">Git</span>
+          <span class="keyword-tag matched">SQL</span>
+          <span class="keyword-tag matched">MongoDB</span>
+          <span class="keyword-tag matched">HTML/CSS</span>
+          <span class="keyword-tag matched">Redux</span>
+          <span class="keyword-tag matched">Testing</span>
+          <span class="keyword-tag matched">Webpack</span>
+          <span class="keyword-tag matched">GraphQL</span>
+          <span class="keyword-tag matched">Express</span>
+          <span class="keyword-tag matched">Tailwind CSS</span>
+          <span class="keyword-tag matched">Next.js</span>
+          </div>
         </div>
       </section>
 
       <!-- Full Job Description Section -->
       <section class="job-description-section">
         <div class="section-header">
-          <h2>Detected Job description</h2>
+          <h2>Detected Job Description</h2>
           <button class="edit-btn" id="edit-job-description-btn">Edit</button>
         </div>
         <div class="job-description-content">
@@ -226,11 +156,11 @@
     <!-- Footer -->
     <footer class="upload-section">
       <input type="file" id="resume-upload" accept=".pdf,.doc,.docx" style="display: none;">
-      <button class="upload-btn" id="upload-btn">Upload New Resume</button>
       <div class="current-resume">
         <span class="current-label">Current:</span>
-        <span class="current-file" id="current-file">resume_john_doe.pdf</span>
+        <span class="current-file" id="current-file">No file selected</span>
       </div>
+      <button class="upload-btn" id="upload-btn">Upload New Resume</button>
     </footer>
   </div>
 
@@ -247,38 +177,48 @@
 
       <div class="divider"></div>
 
-      <!-- Part 2: Suggested (AFTER) -->
+      <!-- Part 2: AI Suggestion (Collapsible) -->
       <div class="keyword-section">
-        <h4 class="section-label">SUGGESTED (AFTER)</h4>
-        <div class="suggestions-grid">
-          <!-- Skills Section Suggestion -->
-          <div class="suggestion-card">
-            <div class="suggestion-header">
-              <span class="suggestion-label">ADD TO SKILLS SECTION</span>
-              <button class="copy-btn" data-copy="skill">
-                <svg class="copy-icon" width="14" height="14" viewBox="0 0 14 14" fill="none" xmlns="http://www.w3.org/2000/svg">
-                  <path d="M9.33333 1.16667H4.66667C3.93029 1.16667 3.33333 1.76362 3.33333 2.5V9.33333" stroke="#1447E6" stroke-width="1.16667" stroke-linecap="round" stroke-linejoin="round"/>
-                  <path d="M10.6667 4.66667H7C6.26362 4.66667 5.66667 5.26362 5.66667 6V12.8333C5.66667 13.5697 6.26362 14.1667 7 14.1667H10.6667C11.403 14.1667 12 13.5697 12 12.8333V6C12 5.26362 11.403 4.66667 10.6667 4.66667Z" stroke="#1447E6" stroke-width="1.16667" stroke-linecap="round" stroke-linejoin="round"/>
-                </svg>
-                <span class="copy-text">Copy</span>
-              </button>
+        <div class="ai-suggestion-header collapsible-header" id="ai-suggestion-header">
+          <div class="section-header-left">
+            <div class="section-icon ai-icon">
+              <i class="bi bi-info-circle-fill" style="font-size: 16px; color: #2563EB;"></i>
             </div>
-            <p class="suggestion-text" id="skill-suggestion">Proficient in Python for data analysis and backend development, with experience in libraries such as Pandas, NumPy, and Flask</p>
+            <h4 class="section-label">AI SUGGESTION</h4>
           </div>
-
-          <!-- Summary Section Suggestion -->
-          <div class="suggestion-card">
-            <div class="suggestion-header">
-              <span class="suggestion-label">ADD TO SUMMARY SECTION</span>
-              <button class="copy-btn" data-copy="summary">
-                <svg class="copy-icon" width="14" height="14" viewBox="0 0 14 14" fill="none" xmlns="http://www.w3.org/2000/svg">
-                  <path d="M9.33333 1.16667H4.66667C3.93029 1.16667 3.33333 1.76362 3.33333 2.5V9.33333" stroke="#1447E6" stroke-width="1.16667" stroke-linecap="round" stroke-linejoin="round"/>
-                  <path d="M10.6667 4.66667H7C6.26362 4.66667 5.66667 5.26362 5.66667 6V12.8333C5.66667 13.5697 6.26362 14.1667 7 14.1667H10.6667C11.403 14.1667 12 13.5697 12 12.8333V6C12 5.26362 11.403 4.66667 10.6667 4.66667Z" stroke="#1447E6" stroke-width="1.16667" stroke-linecap="round" stroke-linejoin="round"/>
-                </svg>
-                <span class="copy-text">Copy</span>
-              </button>
+          <button class="collapse-toggle" aria-label="Toggle section">
+            <i class="bi bi-chevron-up" style="font-size: 14px; color: #6B7280;"></i>
+          </button>
+        </div>
+        <div class="ai-suggestion-content" id="ai-suggestion-content">
+          <div class="ai-loading-indicator" id="ai-loading-indicator" style="display: none;">
+            <div class="spinner"></div>
+            <p class="loading-text">AI is analyzing your resume...</p>
+          </div>
+          <div class="suggestions-grid" id="suggestions-grid">
+            <!-- Summary Section Suggestion -->
+            <div class="suggestion-card">
+              <div class="suggestion-header">
+                <span class="suggestion-label">ADD TO SUMMARY</span>
+                <button class="copy-btn" data-copy="summary">
+                  <i class="bi bi-clipboard" style="font-size: 14px; color: #1447E6;"></i>
+                  <span class="copy-text">Copy</span>
+                </button>
+              </div>
+              <p class="suggestion-text" id="summary-suggestion">Full-stack developer with expertise in JavaScript, TypeScript, and Python, delivering scalable web applications</p>
             </div>
-            <p class="suggestion-text" id="summary-suggestion">Full-stack developer with expertise in JavaScript, TypeScript, and Python, delivering scalable web applications</p>
+
+            <!-- Bullet Point Suggestion -->
+            <div class="suggestion-card">
+              <div class="suggestion-header">
+                <span class="suggestion-label">ADD TO BULLET POINT</span>
+                <button class="copy-btn" data-copy="bullet">
+                  <i class="bi bi-clipboard" style="font-size: 14px; color: #1447E6;"></i>
+                  <span class="copy-text">Copy</span>
+                </button>
+              </div>
+              <p class="suggestion-text" id="bullet-suggestion">Applied machine learning algorithms including regression, classification, and clustering using Python and scikit-learn</p>
+            </div>
           </div>
         </div>
       </div>
@@ -299,10 +239,7 @@
   <div id="job-view" class="view" style="display: none;">
     <div class="keyword-header">
       <button class="back-btn" id="back-from-job">
-        <svg width="20" height="20" viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg">
-          <path d="M11.6667 15L6.66667 10L11.6667 5" stroke="#4A5565" stroke-width="1.66667" stroke-linecap="round" stroke-linejoin="round"/>
-          <path d="M15.8333 10H4.16667" stroke="#4A5565" stroke-width="1.66667" stroke-linecap="round" stroke-linejoin="round"/>
-        </svg>
+        <i class="bi bi-arrow-left" style="font-size: 20px; color: #4A5565;"></i>
       </button>
       <h2 class="keyword-view-title">Detected Job</h2>
     </div>
@@ -365,6 +302,118 @@ Key Requirements:
 • Excellent problem-solving and communication skills
 
 The ideal candidate will have experience building scalable web applications and working in fast-paced environments.</p>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Settings View -->
+  <div id="settings-view" class="view" style="display: none;">
+    <div class="keyword-header">
+      <button class="back-btn" id="back-from-settings">
+        <i class="bi bi-arrow-left" style="font-size: 20px; color: #4A5565;"></i>
+      </button>
+      <h2 class="keyword-view-title">Settings</h2>
+    </div>
+    <div class="settings-content">
+      <!-- AI Provider Selection -->
+      <div class="settings-section">
+        <h4 class="section-label">AI PROVIDER</h4>
+        <div class="settings-card">
+          <div class="provider-options">
+            <label class="provider-option">
+              <input type="radio" name="ai-provider" value="openai" id="provider-openai">
+              <span class="provider-label">OpenAI (GPT-4/GPT-3.5)</span>
+            </label>
+            <label class="provider-option">
+              <input type="radio" name="ai-provider" value="claude" id="provider-claude">
+              <span class="provider-label">Anthropic Claude</span>
+            </label>
+            <label class="provider-option">
+              <input type="radio" name="ai-provider" value="gemini" id="provider-gemini">
+              <span class="provider-label">Google Gemini</span>
+            </label>
+          </div>
+        </div>
+      </div>
+
+      <div class="divider"></div>
+
+      <!-- Model Selection -->
+      <div class="settings-section">
+        <h4 class="section-label">MODEL</h4>
+        <div class="settings-card">
+          <!-- OpenAI Models -->
+          <select id="model-openai" class="model-select" style="display: none;">
+            <option value="gpt-4">GPT-4</option>
+            <option value="gpt-4-turbo">GPT-4 Turbo</option>
+            <option value="gpt-4o">GPT-4o</option>
+            <option value="gpt-3.5-turbo" selected>GPT-3.5 Turbo</option>
+            <option value="gpt-3.5-turbo-16k">GPT-3.5 Turbo 16k</option>
+          </select>
+
+          <!-- Claude Models -->
+          <select id="model-claude" class="model-select" style="display: none;">
+            <option value="claude-3-5-sonnet-20241022" selected>Claude 3.5 Sonnet</option>
+            <option value="claude-3-5-haiku-20241022">Claude 3.5 Haiku</option>
+            <option value="claude-3-opus-20240229">Claude 3 Opus</option>
+            <option value="claude-3-sonnet-20240229">Claude 3 Sonnet</option>
+            <option value="claude-3-haiku-20240307">Claude 3 Haiku</option>
+          </select>
+
+          <!-- Gemini Models -->
+          <select id="model-gemini" class="model-select" style="display: none;">
+            <option value="gemini-1.5-flash" selected>Gemini 1.5 Flash</option>
+            <option value="gemini-1.5-pro">Gemini 1.5 Pro</option>
+            <option value="gemini-1.5-flash-latest">Gemini 1.5 Flash (Latest)</option>
+            <option value="gemini-1.5-pro-latest">Gemini 1.5 Pro (Latest)</option>
+            <option value="gemini-pro">Gemini Pro (Legacy)</option>
+          </select>
+
+          <p class="settings-help-text" id="model-help">Select a provider to see available models</p>
+        </div>
+      </div>
+
+      <div class="divider"></div>
+
+      <!-- API Key Input -->
+      <div class="settings-section">
+        <h4 class="section-label">API KEY</h4>
+        <div class="settings-card">
+          <div class="api-key-input-wrapper">
+            <input type="password" id="api-key-input" class="api-key-input" placeholder="Enter your API key">
+            <button class="toggle-visibility-btn" id="toggle-api-key-visibility" aria-label="Toggle API key visibility">
+              <i class="bi bi-eye" id="visibility-icon" style="font-size: 16px; color: #4A5565;"></i>
+            </button>
+          </div>
+          <p class="settings-help-text" id="api-key-help">Select a provider to see API key format requirements</p>
+          <div class="settings-links">
+            <a href="https://platform.openai.com/api-keys" target="_blank" id="openai-link" style="display: none;">Get OpenAI API Key</a>
+            <a href="https://console.anthropic.com/" target="_blank" id="claude-link" style="display: none;">Get Claude API Key</a>
+            <a href="https://makersuite.google.com/app/apikey" target="_blank" id="gemini-link" style="display: none;">Get Gemini API Key</a>
+          </div>
+        </div>
+      </div>
+
+      <div class="divider"></div>
+
+      <!-- Status Indicator -->
+      <div class="settings-section">
+        <h4 class="section-label">STATUS</h4>
+        <div class="settings-card">
+          <div class="status-indicator" id="settings-status">
+            <span class="status-text">Not configured</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="divider"></div>
+
+      <!-- Action Buttons -->
+      <div class="settings-section">
+        <div class="settings-actions">
+          <button class="save-settings-btn" id="save-settings-btn">Save Settings</button>
+          <button class="clear-settings-btn" id="clear-settings-btn">Clear API Key</button>
         </div>
       </div>
     </div>

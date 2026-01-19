@@ -39,6 +39,7 @@ async function waitForMammoth(maxWaitMs = 5000) {
 const mainView = document.getElementById('main-view');
 const keywordView = document.getElementById('keyword-view');
 const jobView = document.getElementById('job-view');
+const settingsView = document.getElementById('settings-view');
 
 // Current resume content
 let currentResumeText = '';
@@ -238,6 +239,242 @@ function detectJobDomain(jobTitle, jobDescription, url) {
   // #endregion
   
   return finalDomain;
+}
+
+// AI Configuration Functions
+// Save AI provider, model, and API key to chrome.storage.local
+async function saveAIConfig(provider, model, apiKey) {
+  try {
+    await chrome.storage.local.set({
+      aiProvider: provider,
+      aiModel: model,
+      apiKey: apiKey
+    });
+    console.log('✅ AI configuration saved:', { provider, model, apiKeyLength: apiKey?.length || 0 });
+    return true;
+  } catch (error) {
+    console.error('❌ Error saving AI configuration:', error);
+    return false;
+  }
+}
+
+// Retrieve AI provider, model, and API key from storage
+async function getAIConfig() {
+  try {
+    const result = await chrome.storage.local.get(['aiProvider', 'aiModel', 'apiKey']);
+    return {
+      provider: result.aiProvider || null,
+      model: result.aiModel || null,
+      apiKey: result.apiKey || null
+    };
+  } catch (error) {
+    console.error('❌ Error retrieving AI configuration:', error);
+    return { provider: null, model: null, apiKey: null };
+  }
+}
+
+// Check if AI provider, model, and API key are configured
+async function checkAIConfigured() {
+  const config = await getAIConfig();
+  return config.provider && config.model && config.apiKey && config.apiKey.trim() !== '';
+}
+
+// Validate API key format based on provider
+function validateAPIKey(provider, apiKey) {
+  if (!apiKey || apiKey.trim() === '') {
+    return { valid: false, message: 'API key cannot be empty' };
+  }
+  
+  const trimmedKey = apiKey.trim();
+  
+  switch (provider) {
+    case 'openai':
+      if (!trimmedKey.startsWith('sk-')) {
+        return { valid: false, message: 'OpenAI API keys typically start with "sk-"' };
+      }
+      break;
+    case 'claude':
+      if (!trimmedKey.startsWith('sk-ant-')) {
+        return { valid: false, message: 'Claude API keys typically start with "sk-ant-"' };
+      }
+      break;
+    case 'gemini':
+      // Gemini API keys can have various formats, so we just check it's not empty
+      if (trimmedKey.length < 10) {
+        return { valid: false, message: 'Gemini API key appears to be invalid' };
+      }
+      break;
+    default:
+      return { valid: false, message: 'Unknown AI provider' };
+  }
+  
+  return { valid: true, message: 'API key format looks valid' };
+}
+
+// Load settings view with saved configuration
+async function loadSettingsView() {
+  const config = await getAIConfig();
+  
+  // Set provider radio button
+  if (config.provider) {
+    const providerRadio = document.getElementById(`provider-${config.provider}`);
+    if (providerRadio) {
+      providerRadio.checked = true;
+      updateProviderUI(config.provider);
+      
+      // Set model dropdown
+      if (config.model) {
+        const modelSelect = document.getElementById(`model-${config.provider}`);
+        if (modelSelect) {
+          modelSelect.value = config.model;
+        }
+      }
+    }
+  }
+  
+  // Set API key (masked for display)
+  const apiKeyInput = document.getElementById('api-key-input');
+  if (apiKeyInput && config.apiKey) {
+    // Show masked version
+    apiKeyInput.value = '•'.repeat(Math.min(config.apiKey.length, 20));
+    apiKeyInput.dataset.actualKey = config.apiKey; // Store actual key in dataset
+  }
+  
+  // Update status
+  updateSettingsStatus(config.provider, config.apiKey);
+}
+
+// Update provider-specific UI elements
+function updateProviderUI(provider) {
+  const apiKeyInput = document.getElementById('api-key-input');
+  const apiKeyHelp = document.getElementById('api-key-help');
+  const modelHelp = document.getElementById('model-help');
+  const openaiLink = document.getElementById('openai-link');
+  const claudeLink = document.getElementById('claude-link');
+  const geminiLink = document.getElementById('gemini-link');
+  
+  // Hide all model dropdowns and links
+  document.querySelectorAll('.model-select').forEach(select => {
+    select.style.display = 'none';
+  });
+  if (openaiLink) openaiLink.style.display = 'none';
+  if (claudeLink) claudeLink.style.display = 'none';
+  if (geminiLink) geminiLink.style.display = 'none';
+  
+  // Update placeholder, help text, and show relevant model dropdown
+  if (apiKeyInput && apiKeyHelp && modelHelp) {
+    switch (provider) {
+      case 'openai':
+        apiKeyInput.placeholder = 'Enter your OpenAI API key (starts with sk-)';
+        apiKeyHelp.textContent = 'OpenAI API keys start with "sk-". Get your key from platform.openai.com';
+        modelHelp.textContent = 'GPT-4 is more capable but costs more. GPT-3.5 Turbo is faster and cheaper.';
+        document.getElementById('model-openai').style.display = 'block';
+        if (openaiLink) openaiLink.style.display = 'inline';
+        break;
+      case 'claude':
+        apiKeyInput.placeholder = 'Enter your Claude API key (starts with sk-ant-)';
+        apiKeyHelp.textContent = 'Claude API keys start with "sk-ant-". Get your key from console.anthropic.com';
+        modelHelp.textContent = 'Claude 3.5 Sonnet is the latest and most capable model. Haiku is faster and cheaper.';
+        document.getElementById('model-claude').style.display = 'block';
+        if (claudeLink) claudeLink.style.display = 'inline';
+        break;
+      case 'gemini':
+        apiKeyInput.placeholder = 'Enter your Gemini API key';
+        apiKeyHelp.textContent = 'Get your Gemini API key from makersuite.google.com/app/apikey';
+        modelHelp.textContent = 'Flash is faster and free-tier friendly. Pro offers better quality.';
+        document.getElementById('model-gemini').style.display = 'block';
+        if (geminiLink) geminiLink.style.display = 'inline';
+        break;
+      default:
+        apiKeyInput.placeholder = 'Select a provider first';
+        apiKeyHelp.textContent = 'Select a provider to see API key format requirements';
+        modelHelp.textContent = 'Select a provider to see available models';
+    }
+  }
+}
+
+// Update settings status indicator
+function updateSettingsStatus(provider, apiKey) {
+  const statusIndicator = document.getElementById('settings-status');
+  const statusText = statusIndicator?.querySelector('.status-text');
+  
+  if (statusIndicator && statusText) {
+    if (provider && apiKey && apiKey.trim() !== '') {
+      statusIndicator.className = 'status-indicator configured';
+      statusText.textContent = `Configured: ${provider.charAt(0).toUpperCase() + provider.slice(1)}`;
+    } else {
+      statusIndicator.className = 'status-indicator not-configured';
+      statusText.textContent = 'Not configured';
+    }
+  }
+}
+
+// Save settings from form
+async function saveSettings() {
+  const selectedProvider = document.querySelector('input[name="ai-provider"]:checked')?.value;
+  const modelSelect = document.getElementById(`model-${selectedProvider}`);
+  const selectedModel = modelSelect?.value || null;
+  const apiKeyInput = document.getElementById('api-key-input');
+  
+  // Get API key - prioritize actual key from dataset, fallback to input value
+  // Check if input contains masked bullets (•) - if so, use the actual key from dataset
+  let apiKey = '';
+  const inputValue = apiKeyInput?.value?.trim() || '';
+  const actualKey = apiKeyInput?.dataset?.actualKey?.trim() || '';
+  
+  // If input contains bullets, it's masked - use the actual key
+  if (inputValue.includes('•') && actualKey) {
+    apiKey = actualKey;
+  } else if (inputValue && !inputValue.includes('•')) {
+    // Input has a real value (not masked)
+    apiKey = inputValue;
+  } else if (actualKey) {
+    // Fallback to actual key from dataset
+    apiKey = actualKey;
+  }
+  
+  if (!selectedProvider) {
+    alert('Please select an AI provider');
+    return false;
+  }
+  
+  if (!selectedModel) {
+    alert('Please select a model');
+    return false;
+  }
+  
+  if (!apiKey || apiKey === '') {
+    alert('Please enter an API key');
+    return false;
+  }
+  
+  // Validate API key
+  const validation = validateAPIKey(selectedProvider, apiKey);
+  if (!validation.valid) {
+    alert(validation.message);
+    return false;
+  }
+  
+  // Save configuration
+  const saved = await saveAIConfig(selectedProvider, selectedModel, apiKey);
+  if (saved) {
+    // Update the dataset with the actual key for future use
+    if (apiKeyInput) {
+      apiKeyInput.dataset.actualKey = apiKey;
+    }
+    updateSettingsStatus(selectedProvider, apiKey);
+    alert('Settings saved successfully!');
+    return true;
+  } else {
+    alert('Failed to save settings. Please try again.');
+    return false;
+  }
+}
+
+// Open settings view
+function openSettingsView() {
+  loadSettingsView();
+  showView(settingsView);
 }
 
 // Keyword suggestions data
@@ -588,6 +825,501 @@ function extractKeywords(text, domain = 'general') {
   // Return original matched text (preserve case for display)
   // Normalization will be done separately for comparison only
   return foundKeywords;
+}
+
+// Resume Section Parser Helper (optional - for better context to AI)
+function parseResumeSections(resumeText) {
+  if (!resumeText) return { summary: '', skills: '', experience: [] };
+  
+  const sections = {
+    summary: '',
+    skills: '',
+    experience: []
+  };
+  
+  // Try to identify summary section (usually at the beginning)
+  const summaryPatterns = [
+    /(?:summary|profile|objective|about)[\s:]*\n([^\n]{50,500})/i,
+    /^([^\n]{50,300})(?:\n\n|skills|experience)/i
+  ];
+  
+  for (const pattern of summaryPatterns) {
+    const match = resumeText.match(pattern);
+    if (match && match[1]) {
+      sections.summary = match[1].trim();
+      break;
+    }
+  }
+  
+  // Try to identify skills section
+  const skillsPattern = /(?:skills|technical\s+skills|competencies)[\s:]*\n([^\n]+(?:\n[^\n]+)*?)(?=\n\n|\n[A-Z]|$)/i;
+  const skillsMatch = resumeText.match(skillsPattern);
+  if (skillsMatch && skillsMatch[1]) {
+    sections.skills = skillsMatch[1].trim();
+  }
+  
+  // Try to identify experience bullet points
+  const bulletPattern = /[•\-\*]\s*([^\n]+)/g;
+  const bullets = [];
+  let bulletMatch;
+  while ((bulletMatch = bulletPattern.exec(resumeText)) !== null && bullets.length < 10) {
+    bullets.push(bulletMatch[1].trim());
+  }
+  sections.experience = bullets;
+  
+  return sections;
+}
+
+// AI API Integration Functions
+
+// Parse AI response to standardized format
+function parseAIResponse(provider, response) {
+  try {
+    let content = '';
+    
+    switch (provider) {
+      case 'openai':
+        content = response.choices?.[0]?.message?.content || '';
+        break;
+      case 'claude':
+        content = response.content?.[0]?.text || '';
+        break;
+      case 'gemini':
+        content = response.candidates?.[0]?.content?.parts?.[0]?.text || '';
+        break;
+      default:
+        throw new Error('Unknown provider');
+    }
+    
+    if (!content) {
+      throw new Error('Empty response from AI');
+    }
+    
+    // Try to parse JSON from the response
+    let parsed;
+    try {
+      // Look for JSON in the response (might be wrapped in markdown code blocks)
+      const jsonMatch = content.match(/```json\s*([\s\S]*?)\s*```/) || content.match(/```\s*([\s\S]*?)\s*```/);
+      if (jsonMatch) {
+        parsed = JSON.parse(jsonMatch[1]);
+      } else {
+        parsed = JSON.parse(content);
+      }
+    } catch (e) {
+      // If not JSON, try to extract information from text
+      // This is a fallback - ideally AI should return JSON
+      parsed = {
+        location: 'summary',
+        original: 'Unable to parse original text from resume',
+        bulletSuggestion: '',
+        skillSuggestion: content.substring(0, 200),
+        summarySuggestion: content.substring(0, 200)
+      };
+    }
+    
+    return {
+      location: parsed.location || 'summary',
+      original: parsed.original || '',
+      bulletSuggestion: parsed.bulletSuggestion || parsed.bullet || '',
+      skillSuggestion: parsed.skillSuggestion || parsed.skill || '',
+      summarySuggestion: parsed.summarySuggestion || parsed.summary || ''
+    };
+  } catch (error) {
+    console.error('Error parsing AI response:', error);
+    throw error;
+  }
+}
+
+// Call OpenAI API
+async function callOpenAI(keyword, resumeText, apiKey, model = 'gpt-3.5-turbo') {
+  const prompt = `You are a resume optimization expert. Analyze the following resume and suggest how to incorporate the missing keyword "${keyword}".
+
+Resume Text:
+${resumeText}
+
+Task:
+1. Scan the resume and identify the BEST location to incorporate "${keyword}" (could be in a bullet point in experience section, summary section, or skills section)
+2. Extract the ORIGINAL text from that location
+3. Generate suggestions that incorporate "${keyword}" in the appropriate format for each section type
+
+Return your response as JSON with this exact structure:
+{
+  "location": "summary" | "skills" | "bullet",
+  "original": "the original text from the resume at the identified location",
+  "bulletSuggestion": "if location is 'bullet', provide the modified bullet point text that incorporates the keyword. Otherwise, provide an alternative bullet point suggestion.",
+  "skillSuggestion": "a short skill phrase or list item (e.g., 'workshop facilitation' or 'Workshop Facilitation, User Research'). This should be a concise skill that can be added to a skills section.",
+  "summarySuggestion": "a complete summary sentence or paragraph that naturally incorporates the keyword. This should be professional and ready to use in a resume summary section."
+}
+
+IMPORTANT FORMAT REQUIREMENTS:
+- skillSuggestion: Must be a SHORT phrase or skill name (1-5 words), suitable for a skills list. Examples: "workshop facilitation", "User Research, Workshop Facilitation", "Presentation Skills"
+- summarySuggestion: Must be a COMPLETE sentence or paragraph (10+ words), suitable for a professional summary. Example: "Experienced designer with expertise in workshop facilitation and user research methodologies."
+- bulletSuggestion: Must be a COMPLETE bullet point sentence (10+ words) describing an accomplishment or responsibility. Example: "Facilitated 10+ user research workshops with cross-functional teams, translating insights into actionable product improvements."
+
+Be specific and natural. The modified text should sound professional and authentic.`;
+
+  const response = await fetch('https://api.openai.com/v1/chat/completions', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${apiKey}`
+    },
+    body: JSON.stringify({
+      model: model, // Use selected model
+      messages: [{
+        role: 'user',
+        content: prompt
+      }],
+      temperature: 0.7,
+      max_tokens: 1024
+    })
+  });
+  
+  if (!response.ok) {
+    const errorData = await response.json().catch(() => ({}));
+    throw new Error(errorData.error?.message || `OpenAI API error: ${response.status}`);
+  }
+  
+  const data = await response.json();
+  return parseAIResponse('openai', data);
+}
+
+// Call Anthropic Claude API
+async function callClaude(keyword, resumeText, apiKey, model = 'claude-3-5-sonnet-20241022') {
+  const prompt = `You are a resume optimization expert. Analyze the following resume and suggest how to incorporate the missing keyword "${keyword}".
+
+Resume Text:
+${resumeText}
+
+Task:
+1. Scan the resume and identify the BEST location to incorporate "${keyword}" (could be in a bullet point in experience section, summary section, or skills section)
+2. Extract the ORIGINAL text from that location
+3. Generate suggestions that incorporate "${keyword}" in the appropriate format for each section type
+
+Return your response as JSON with this exact structure:
+{
+  "location": "summary" | "skills" | "bullet",
+  "original": "the original text from the resume at the identified location",
+  "bulletSuggestion": "if location is 'bullet', provide the modified bullet point text that incorporates the keyword. Otherwise, provide an alternative bullet point suggestion.",
+  "skillSuggestion": "a short skill phrase or list item (e.g., 'workshop facilitation' or 'Workshop Facilitation, User Research'). This should be a concise skill that can be added to a skills section.",
+  "summarySuggestion": "a complete summary sentence or paragraph that naturally incorporates the keyword. This should be professional and ready to use in a resume summary section."
+}
+
+IMPORTANT FORMAT REQUIREMENTS:
+- skillSuggestion: Must be a SHORT phrase or skill name (1-5 words), suitable for a skills list. Examples: "workshop facilitation", "User Research, Workshop Facilitation", "Presentation Skills"
+- summarySuggestion: Must be a COMPLETE sentence or paragraph (10+ words), suitable for a professional summary. Example: "Experienced designer with expertise in workshop facilitation and user research methodologies."
+- bulletSuggestion: Must be a COMPLETE bullet point sentence (10+ words) describing an accomplishment or responsibility. Example: "Facilitated 10+ user research workshops with cross-functional teams, translating insights into actionable product improvements."
+
+Be specific and natural. The modified text should sound professional and authentic.`;
+
+  const response = await fetch('https://api.anthropic.com/v1/messages', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'x-api-key': apiKey,
+      'anthropic-version': '2023-06-01'
+    },
+    body: JSON.stringify({
+      model: model, // Use selected model
+      max_tokens: 1024,
+      messages: [{
+        role: 'user',
+        content: prompt
+      }]
+    })
+  });
+  
+  if (!response.ok) {
+    const errorData = await response.json().catch(() => ({}));
+    throw new Error(errorData.error?.message || `Claude API error: ${response.status}`);
+  }
+  
+  const data = await response.json();
+  return parseAIResponse('claude', data);
+}
+
+// Helper function to list available Gemini models
+async function listGeminiModels(apiKey) {
+  try {
+    const response = await fetch(`https://generativelanguage.googleapis.com/v1/models?key=${encodeURIComponent(apiKey)}`);
+    if (response.ok) {
+      const data = await response.json();
+      console.log('📋 Available Gemini models:', data.models?.map(m => m.name) || []);
+      return data.models || [];
+    } else {
+      const errorData = await response.json().catch(() => ({}));
+      console.warn('Could not list Gemini models:', errorData);
+    }
+  } catch (error) {
+    console.warn('Could not list Gemini models:', error);
+  }
+  return [];
+}
+
+// Call Google Gemini API
+async function callGemini(keyword, resumeText, apiKey, model = 'gemini-1.5-flash') {
+  const prompt = `You are a resume optimization expert. Analyze the following resume and suggest how to incorporate the missing keyword "${keyword}".
+
+Resume Text:
+${resumeText}
+
+Task:
+1. Scan the resume and identify the BEST location to incorporate "${keyword}" (could be in a bullet point in experience section, summary section, or skills section)
+2. Extract the ORIGINAL text from that location
+3. Generate suggestions that incorporate "${keyword}" in the appropriate format for each section type
+
+Return your response as JSON with this exact structure:
+{
+  "location": "summary" | "skills" | "bullet",
+  "original": "the original text from the resume at the identified location",
+  "bulletSuggestion": "if location is 'bullet', provide the modified bullet point text that incorporates the keyword. Otherwise, provide an alternative bullet point suggestion.",
+  "skillSuggestion": "a short skill phrase or list item (e.g., 'workshop facilitation' or 'Workshop Facilitation, User Research'). This should be a concise skill that can be added to a skills section.",
+  "summarySuggestion": "a complete summary sentence or paragraph that naturally incorporates the keyword. This should be professional and ready to use in a resume summary section."
+}
+
+IMPORTANT FORMAT REQUIREMENTS:
+- skillSuggestion: Must be a SHORT phrase or skill name (1-5 words), suitable for a skills list. Examples: "workshop facilitation", "User Research, Workshop Facilitation", "Presentation Skills"
+- summarySuggestion: Must be a COMPLETE sentence or paragraph (10+ words), suitable for a professional summary. Example: "Experienced designer with expertise in workshop facilitation and user research methodologies."
+- bulletSuggestion: Must be a COMPLETE bullet point sentence (10+ words) describing an accomplishment or responsibility. Example: "Facilitated 10+ user research workshops with cross-functional teams, translating insights into actionable product improvements."
+
+Be specific and natural. The modified text should sound professional and authentic.`;
+
+  // First, try to get available models from the API
+  let availableModels = [];
+  let availableModelNames = [];
+  try {
+    availableModels = await listGeminiModels(apiKey);
+    // Extract model names from available models (format: "models/gemini-1.5-flash-001" -> "gemini-1.5-flash-001")
+    availableModelNames = availableModels
+      .map(m => {
+        const name = m.name || '';
+        return name.replace(/^models\//, ''); // Remove "models/" prefix if present
+      })
+      .filter(name => name && name.includes('gemini'));
+    
+    console.log('🔍 Available Gemini models:', availableModelNames);
+  } catch (error) {
+    console.warn('Could not fetch available models, will try common model names:', error);
+  }
+  
+  // Map user-friendly model names to actual API model names
+  const modelNameVariations = [];
+  
+  // If we have available models from API, prioritize those
+  if (availableModelNames.length > 0) {
+    // Find models that match the selected model type
+    const baseModelName = model.replace('-latest', '').replace('-001', '').replace('-002', '');
+    const matchingModels = availableModelNames.filter(name => {
+      const nameLower = name.toLowerCase();
+      if (baseModelName.includes('flash')) {
+        return nameLower.includes('flash');
+      } else if (baseModelName.includes('pro')) {
+        return nameLower.includes('pro') && !nameLower.includes('flash');
+      }
+      return nameLower.includes(baseModelName.toLowerCase());
+    });
+    
+    if (matchingModels.length > 0) {
+      console.log('✅ Found matching models from API:', matchingModels);
+      modelNameVariations.push(...matchingModels);
+    } else {
+      // If no exact match, try all available models
+      console.log('⚠️ No exact match, will try all available models');
+      modelNameVariations.push(...availableModelNames);
+    }
+  }
+  
+  // Generate fallback model name formats to try
+  // Based on Gemini API docs and common model names
+  if (model.includes('flash')) {
+    // Try newer models first
+    modelNameVariations.push('gemini-2.5-flash');
+    modelNameVariations.push('gemini-2.5-flash-001');
+    modelNameVariations.push('gemini-2.5-flash-002');
+    // Then 1.5 series
+    modelNameVariations.push('gemini-1.5-flash-001');
+    modelNameVariations.push('gemini-1.5-flash-002');
+    modelNameVariations.push('gemini-1.5-flash');
+    modelNameVariations.push('gemini-1.5-flash-latest');
+    // 1.0 series as fallback
+    modelNameVariations.push('gemini-1.0-flash');
+    modelNameVariations.push('gemini-1.0-flash-001');
+  } else if (model.includes('pro')) {
+    // Try newer models first
+    modelNameVariations.push('gemini-2.5-pro');
+    modelNameVariations.push('gemini-2.5-pro-001');
+    modelNameVariations.push('gemini-2.5-pro-002');
+    // Then 1.5 series
+    modelNameVariations.push('gemini-1.5-pro-001');
+    modelNameVariations.push('gemini-1.5-pro-002');
+    modelNameVariations.push('gemini-1.5-pro');
+    modelNameVariations.push('gemini-1.5-pro-latest');
+    // 1.0 series as fallback
+    modelNameVariations.push('gemini-1.0-pro');
+    modelNameVariations.push('gemini-1.0-pro-001');
+  } else {
+    // For other models, try as-is and with common variations
+    modelNameVariations.push(model);
+    modelNameVariations.push(`${model}-001`);
+    modelNameVariations.push(`${model}-latest`);
+  }
+  
+  // Remove duplicates while preserving order (API models first)
+  const uniqueVariations = [];
+  const seen = new Set();
+  for (const name of modelNameVariations) {
+    if (!seen.has(name)) {
+      seen.add(name);
+      uniqueVariations.push(name);
+    }
+  }
+  
+  console.log('🔄 Will try model variations:', uniqueVariations);
+  
+  // Try each model name variation
+  let lastError = null;
+  for (const apiModelName of uniqueVariations) {
+    // Try v1 API with query parameter (most reliable method for Gemini)
+    let endpoint = `https://generativelanguage.googleapis.com/v1/models/${apiModelName}:generateContent?key=${encodeURIComponent(apiKey)}`;
+    
+    let response = await fetch(endpoint, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({
+        contents: [{
+          parts: [{
+            text: prompt
+          }]
+        }],
+        generationConfig: {
+          temperature: 0.7,
+          maxOutputTokens: 1024
+        }
+      })
+    });
+    
+    // If v1 fails, try v1beta
+    if (!response.ok && response.status === 404) {
+      endpoint = `https://generativelanguage.googleapis.com/v1beta/models/${apiModelName}:generateContent?key=${encodeURIComponent(apiKey)}`;
+      response = await fetch(endpoint, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          contents: [{
+            parts: [{
+              text: prompt
+            }]
+          }],
+          generationConfig: {
+            temperature: 0.7,
+            maxOutputTokens: 1024
+          }
+        })
+      });
+    }
+    
+    // If this model name worked, return the result
+    if (response.ok) {
+      console.log(`✅ Successfully used model: ${apiModelName}`);
+      const data = await response.json();
+      return parseAIResponse('gemini', data);
+    }
+    
+    // Save error for final throw
+    if (response.status !== 404) {
+      // If it's not a 404, it might be a different error (auth, rate limit, etc.)
+      const errorData = await response.json().catch(() => ({}));
+      lastError = new Error(errorData.error?.message || `Gemini API error: ${response.status}`);
+      break; // Don't try other variations for non-404 errors
+    }
+    
+    // For 404, continue to next variation
+    const errorData = await response.json().catch(() => ({}));
+    lastError = new Error(errorData.error?.message || `Model ${apiModelName} not found`);
+  }
+  
+  // If all variations failed, throw the last error
+  if (lastError) {
+    console.error('Gemini API Error - All model variations failed:', {
+      triedModels: modelNameVariations,
+      lastError: lastError.message
+    });
+    throw lastError;
+  }
+  
+  throw new Error('No valid Gemini model found. Please check your API key and model selection.');
+}
+
+// Main AI integration function - routes to provider-specific functions
+async function generateAISuggestions(keyword, resumeText, provider, model, apiKey) {
+  console.log(`🤖 Generating AI suggestions for keyword: ${keyword} using ${provider} (${model})`);
+  
+  if (!resumeText || resumeText.trim() === '') {
+    throw new Error('Resume text is required for AI suggestions');
+  }
+  
+  try {
+    let result;
+    switch (provider) {
+      case 'openai':
+        result = await callOpenAI(keyword, resumeText, apiKey, model);
+        break;
+      case 'claude':
+        result = await callClaude(keyword, resumeText, apiKey, model);
+        break;
+      case 'gemini':
+        result = await callGemini(keyword, resumeText, apiKey, model);
+        break;
+      default:
+        throw new Error(`Unknown AI provider: ${provider}`);
+    }
+    
+    console.log('✅ AI suggestions generated:', result);
+    return result;
+  } catch (error) {
+    console.error(`❌ Error generating AI suggestions with ${provider}:`, error);
+    throw error;
+  }
+}
+
+// Update keyword view with AI suggestions
+function updateKeywordViewWithAI(keyword, aiResponse) {
+  const bulletSuggestionEl = document.getElementById('bullet-suggestion');
+  const summarySuggestionEl = document.getElementById('summary-suggestion');
+  const originalTextEl = document.getElementById('original-text');
+  const loadingIndicator = document.getElementById('ai-loading-indicator');
+  const suggestionsGrid = document.getElementById('suggestions-grid');
+  
+  // Hide loading indicator
+  if (loadingIndicator) loadingIndicator.style.display = 'none';
+  if (suggestionsGrid) suggestionsGrid.style.display = 'flex';
+  
+  // Update suggestion labels and content based on location
+  const summaryLabel = document.querySelector('.suggestion-card:first-child .suggestion-label');
+  const bulletLabel = document.querySelector('.suggestion-card:last-child .suggestion-label');
+  
+  // Always show "ADD TO SUMMARY" and "ADD TO BULLET POINT" as per Figma design
+  if (summaryLabel) summaryLabel.textContent = 'ADD TO SUMMARY';
+  if (bulletLabel) bulletLabel.textContent = 'ADD TO BULLET POINT';
+  
+  // Update summary suggestion
+  if (summarySuggestionEl) {
+    summarySuggestionEl.textContent = aiResponse.summarySuggestion || aiResponse.skillSuggestion || 'No suggestion available';
+  }
+  
+  // Update bullet suggestion
+  if (bulletSuggestionEl) {
+    bulletSuggestionEl.textContent = aiResponse.bulletSuggestion || aiResponse.skillSuggestion || 'No suggestion available';
+  }
+  
+  // Always update original text
+  if (originalTextEl) {
+    originalTextEl.textContent = aiResponse.original || 'Original text not found';
+  }
 }
 
 // Analyze resume against job description with domain detection
@@ -2672,41 +3404,63 @@ function getFirst100Words(text) {
   return first100Words + '...';
 }
 
+// Helper function to calculate point on arc for given angle
+function getPointOnArc(angleDegrees) {
+  // Arc center: (100, 115), radius: 63
+  // Angle measured from left endpoint (0° = left, 180° = right)
+  // Convert to radians
+  const angleRad = (angleDegrees * Math.PI) / 180;
+  // For semi-circle arc: angle from center's positive x-axis (pointing right) going counterclockwise
+  // At 0° (left): angle from center = 180° = π
+  // At 180° (right): angle from center = 0° = 0
+  // So: centerAngle = π - angleRad
+  const centerAngleRad = Math.PI - angleRad;
+  // Calculate coordinates
+  const x = 100 + 63 * Math.cos(centerAngleRad);
+  const y = 115 - 63 * Math.sin(centerAngleRad);
+  return { x, y };
+}
+
 // Update UI with analysis results
 function updateUI(analysis) {
   // Store current analysis for keyword view
   currentAnalysis = analysis;
-  // Clear previous keywords grid at the very beginning to prevent old hardcoded tags
-  const keywordsGrid = document.querySelector('.keywords-grid');
-  keywordsGrid.innerHTML = '';
+  // Clear previous keywords grids at the very beginning to prevent old hardcoded tags
+  const missingKeywordsGrid = document.getElementById('missing-keywords-grid');
+  const detectedKeywordsGrid = document.getElementById('detected-keywords-grid');
+  if (missingKeywordsGrid) missingKeywordsGrid.innerHTML = '';
+  if (detectedKeywordsGrid) detectedKeywordsGrid.innerHTML = '';
   
-  const scoreNumber = document.getElementById('score-number');
+  // Update circular gauge
+  const scoreNumberEl = document.getElementById('score-number');
+  const progressBar = document.getElementById('progress-bar');
   
-  // Update score (remove loading state if present)
-  scoreNumber.textContent = analysis.score;
-  scoreNumber.classList.remove('loading');
-  
-  // Update progress bar
-  const progressFill = document.getElementById('progress-fill');
-  progressFill.style.width = `${analysis.score}%`;
-  if (analysis.score >= 70) {
-    progressFill.style.backgroundColor = '#00c950';
-  } else {
-    progressFill.style.backgroundColor = '#fcb44f';
+  if (scoreNumberEl && progressBar) {
+    const percentage = analysis.score;
+    scoreNumberEl.textContent = percentage;
+    scoreNumberEl.classList.remove('loading');
+    
+    // Set CSS variable for progress
+    progressBar.style.setProperty('--value', percentage);
+    progressBar.setAttribute('aria-valuenow', percentage);
+    
+    // Update color based on score
+    const primaryColor = percentage >= 70 ? '#10B981' : '#F59E0B';
+    progressBar.style.setProperty('--primary', primaryColor);
   }
   
   // Update description
   const description = document.querySelector('.score-description');
-  description.innerHTML = `Your resume has <strong>${analysis.matchedCount} out of ${analysis.totalKeywords} (${analysis.score}%)</strong> keywords that appear in the job description.`;
+  if (description) {
+    description.innerHTML = `Your resume has <strong>${analysis.matchedCount} out of ${analysis.totalKeywords} (${analysis.score}%)</strong> keywords that appear in the job description.`;
+  }
   
-  // Update keyword count badge
-  const keywordCount = document.querySelector('.keyword-count');
-  keywordCount.innerHTML = `
-    <svg width="12" height="12" viewBox="0 0 12 12" fill="none" xmlns="http://www.w3.org/2000/svg">
-      <path d="M10 2.5L4.5 8L2 5.5" stroke="#6b7280" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
-    </svg>
-    ${analysis.matchedCount}/${analysis.totalKeywords}
-  `;
+  
+  // Update job description count badge
+  const jobDescriptionCount = document.getElementById('job-description-count');
+  if (jobDescriptionCount) {
+    jobDescriptionCount.textContent = `${analysis.matchedCount}/${analysis.totalKeywords}`;
+  }
   
   // STEP 1: Update Detected Job section with real data from currentJobMetadata
   console.log('📋 Updating UI with metadata:', currentJobMetadata);
@@ -2799,28 +3553,32 @@ function updateUI(analysis) {
   
   console.log('✅ UI update complete - all job metadata fields updated');
   
-  // Add unmatched keywords first (yellow - all the same)
-  analysis.unmatchedKeywords.forEach(keyword => {
-    const tag = document.createElement('span');
-    tag.className = 'keyword-tag unmatched';
-    tag.setAttribute('data-keyword', keyword);
-    tag.textContent = keyword;
-    tag.addEventListener('click', () => openKeywordView(keyword));
-    keywordsGrid.appendChild(tag);
-  });
+  // Add unmatched keywords to Missing Keywords section
+  if (missingKeywordsGrid) {
+    analysis.unmatchedKeywords.forEach(keyword => {
+      const tag = document.createElement('span');
+      tag.className = 'keyword-tag unmatched';
+      tag.setAttribute('data-keyword', keyword);
+      tag.textContent = keyword;
+      // Ensure click handler is attached
+      tag.addEventListener('click', (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        openKeywordView(keyword);
+      });
+      missingKeywordsGrid.appendChild(tag);
+    });
+  }
   
-  // Add matched keywords (green - all the same)
-  analysis.matchedKeywords.forEach(keyword => {
-    const tag = document.createElement('span');
-    tag.className = 'keyword-tag matched';
-    tag.innerHTML = `
-      <svg class="checkmark" width="14" height="14" viewBox="0 0 14 14" fill="none" xmlns="http://www.w3.org/2000/svg">
-        <path d="M11.6667 3.5L5.25 10L2.33333 7" stroke="#008236" stroke-width="1.45833" stroke-linecap="round" stroke-linejoin="round"/>
-      </svg>
-      ${keyword}
-    `;
-    keywordsGrid.appendChild(tag);
-  });
+  // Add matched keywords to Detected Keywords section
+  if (detectedKeywordsGrid) {
+    analysis.matchedKeywords.forEach(keyword => {
+      const tag = document.createElement('span');
+      tag.className = 'keyword-tag matched';
+      tag.textContent = keyword;
+      detectedKeywordsGrid.appendChild(tag);
+    });
+  }
   
   // Update Full Job Description section
   const jobDescriptionPreview = document.getElementById('job-description-preview');
@@ -2828,6 +3586,12 @@ function updateUI(analysis) {
   const jobDescriptionEditable = document.getElementById('job-description-editable');
   const readMoreBtn = document.getElementById('read-more-btn');
   const editJobDescBtn = document.getElementById('edit-job-description-btn');
+  
+  // Remove the job description count update - we're using edit button now
+  // const jobDescriptionCount = document.getElementById('job-description-count');
+  // if (jobDescriptionCount) {
+  //   jobDescriptionCount.textContent = `${analysis.matchedCount}/${analysis.totalKeywords}`;
+  // }
   
   if (jobDescriptionPreview && jobDescriptionFull && jobDescriptionEditable && readMoreBtn) {
     const jobDesc = currentJobDescription || 'No description available';
@@ -2870,8 +3634,10 @@ async function performScan() {
   
   // Show loading state on score
   const scoreNumber = document.getElementById('score-number');
-  scoreNumber.textContent = 'Analyzing...';
-  scoreNumber.classList.add('loading');
+  if (scoreNumber) {
+    scoreNumber.textContent = '...';
+    scoreNumber.classList.add('loading');
+  }
   
   // Show loading state on buttons
   const refreshBtn = document.getElementById('refresh-btn');
@@ -2941,8 +3707,16 @@ async function performScan() {
     
     // Remove loading state on error
     const scoreNumber = document.getElementById('score-number');
-    scoreNumber.textContent = '0';
-    scoreNumber.classList.remove('loading');
+    const progressBar = document.getElementById('progress-bar');
+    if (scoreNumber) {
+      scoreNumber.textContent = '0';
+      scoreNumber.classList.remove('loading');
+    }
+    if (progressBar) {
+      progressBar.style.setProperty('--value', '0');
+      progressBar.style.setProperty('--primary', '#F59E0B');
+      progressBar.setAttribute('aria-valuenow', '0');
+    }
   } finally {
     refreshBtn.style.opacity = '1';
     refreshBtn.disabled = false;
@@ -2961,6 +3735,7 @@ function showView(view) {
   if (mainView) mainView.style.display = 'none';
   if (keywordView) keywordView.style.display = 'none';
   if (jobView) jobView.style.display = 'none';
+  if (settingsView) settingsView.style.display = 'none';
   
   // Show selected view
   if (view) {
@@ -2968,6 +3743,16 @@ function showView(view) {
     console.log('✅ View displayed:', view.id);
   } else {
     console.error('❌ View is null or undefined');
+  }
+  
+  // Get tab bar element
+  const tabBar = document.querySelector('.tab-bar');
+  
+  // Hide tab bar for settings view, show for other views
+  if (view === settingsView) {
+    if (tabBar) tabBar.style.display = 'none';
+  } else {
+    if (tabBar) tabBar.style.display = 'flex';
   }
   
   // Update tab bar based on which view is shown
@@ -2985,6 +3770,7 @@ function showView(view) {
     if (tabRecommendations) tabRecommendations.classList.add('active');
     console.log('📑 Recommendations tab activated');
   }
+  // Settings view doesn't affect tab bar
 }
 
 // Tab switching function
@@ -3054,7 +3840,7 @@ function populateMissingKeywordsGrid(selectedKeyword) {
     }
     
     // Add click handler to switch to this keyword's suggestions
-    tag.addEventListener('click', () => {
+    tag.addEventListener('click', async () => {
       // Remove highlight from all tags
       missingKeywordsGrid.querySelectorAll('.keyword-tag').forEach(t => {
         t.style.border = '';
@@ -3065,20 +3851,81 @@ function populateMissingKeywordsGrid(selectedKeyword) {
       tag.style.border = '2px solid #3b82f6';
       tag.style.backgroundColor = '#dbeafe';
       
-      // Update suggestions for this keyword
-      const keywordSuggestion = keywordSuggestions[missingKeyword] || {
-        skill: `Add ${missingKeyword} to your technical skills section`,
-        summary: `Consider mentioning ${missingKeyword} in your professional summary`,
-        original: 'Your current resume text'
-      };
+      // Check if AI is configured and use it
+      const isConfigured = await checkAIConfigured();
       
-      const skillSuggestionEl = document.getElementById('skill-suggestion');
-      const summarySuggestionEl = document.getElementById('summary-suggestion');
-      const originalTextEl = document.getElementById('original-text');
-      
-      if (skillSuggestionEl) skillSuggestionEl.textContent = keywordSuggestion.skill;
-      if (summarySuggestionEl) summarySuggestionEl.textContent = keywordSuggestion.summary;
-      if (originalTextEl) originalTextEl.textContent = keywordSuggestion.original;
+      if (isConfigured && currentResumeText && currentResumeText.trim() !== '') {
+        // Use AI to generate suggestions
+        const config = await getAIConfig();
+        
+        // Validate API key is not masked (contains bullets)
+        if (!config.apiKey || config.apiKey.includes('•') || config.apiKey.trim() === '') {
+          console.error('❌ API key is invalid or masked. Please re-enter your API key in settings.');
+          // Fallback to hardcoded suggestions
+          const keywordSuggestion = keywordSuggestions[missingKeyword] || {
+            skill: `Add ${missingKeyword} to your technical skills section`,
+            summary: `Consider mentioning ${missingKeyword} in your professional summary`,
+            original: 'Your current resume text'
+          };
+          const skillSuggestionEl = document.getElementById('skill-suggestion');
+          const summarySuggestionEl = document.getElementById('summary-suggestion');
+          const originalTextEl = document.getElementById('original-text');
+          if (skillSuggestionEl) skillSuggestionEl.textContent = keywordSuggestion.skill;
+          if (summarySuggestionEl) summarySuggestionEl.textContent = keywordSuggestion.summary;
+          if (originalTextEl) originalTextEl.textContent = keywordSuggestion.original;
+          return;
+        }
+        
+        const loadingIndicator = document.getElementById('ai-loading-indicator');
+        const suggestionsGrid = document.getElementById('suggestions-grid');
+        
+        // Show loading state
+        if (loadingIndicator) loadingIndicator.style.display = 'flex';
+        if (suggestionsGrid) suggestionsGrid.style.display = 'none';
+        
+        try {
+          console.log(`🤖 Generating AI suggestions for ${missingKeyword} using ${config.provider} (${config.model})...`);
+          console.log('🔑 API key length:', config.apiKey?.length || 0, 'starts with:', config.apiKey?.substring(0, 5) || 'N/A');
+          const aiResponse = await generateAISuggestions(missingKeyword, currentResumeText, config.provider, config.model, config.apiKey);
+          updateKeywordViewWithAI(missingKeyword, aiResponse);
+        } catch (error) {
+          console.error('❌ AI suggestion generation failed:', error);
+          
+          // Hide loading and show grid
+          if (loadingIndicator) loadingIndicator.style.display = 'none';
+          if (suggestionsGrid) suggestionsGrid.style.display = 'flex';
+          
+          // Fallback to hardcoded suggestions
+          const keywordSuggestion = keywordSuggestions[missingKeyword] || {
+            skill: `Add ${missingKeyword} to your technical skills section`,
+            summary: `Consider mentioning ${missingKeyword} in your professional summary`,
+            original: 'Your current resume text'
+          };
+          
+          const bulletSuggestionEl = document.getElementById('bullet-suggestion');
+          const summarySuggestionEl = document.getElementById('summary-suggestion');
+          const originalTextEl = document.getElementById('original-text');
+          
+          if (bulletSuggestionEl) bulletSuggestionEl.textContent = keywordSuggestion.skill;
+          if (summarySuggestionEl) summarySuggestionEl.textContent = keywordSuggestion.summary;
+          if (originalTextEl) originalTextEl.textContent = keywordSuggestion.original;
+        }
+      } else {
+        // No AI configured - use hardcoded suggestions
+        const keywordSuggestion = keywordSuggestions[missingKeyword] || {
+          skill: `Add ${missingKeyword} to your technical skills section`,
+          summary: `Consider mentioning ${missingKeyword} in your professional summary`,
+          original: 'Your current resume text'
+        };
+        
+        const skillSuggestionEl = document.getElementById('skill-suggestion');
+        const summarySuggestionEl = document.getElementById('summary-suggestion');
+        const originalTextEl = document.getElementById('original-text');
+        
+        if (skillSuggestionEl) skillSuggestionEl.textContent = keywordSuggestion.skill;
+        if (summarySuggestionEl) summarySuggestionEl.textContent = keywordSuggestion.summary;
+        if (originalTextEl) originalTextEl.textContent = keywordSuggestion.original;
+      }
     });
     
     missingKeywordsGrid.appendChild(tag);
@@ -3160,43 +4007,99 @@ document.getElementById('resume-upload')?.addEventListener('change', async (e) =
 // Keyword click handlers - open keyword detail view
 function attachKeywordHandlers() {
   document.querySelectorAll('.keyword-tag.unmatched').forEach(tag => {
-    tag.addEventListener('click', () => {
-      const keyword = tag.getAttribute('data-keyword') || tag.textContent.trim();
-      openKeywordView(keyword);
-    });
+    // Check if handler already exists by looking for data attribute
+    if (!tag.hasAttribute('data-handler-attached')) {
+      tag.setAttribute('data-handler-attached', 'true');
+      tag.addEventListener('click', (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        const keyword = tag.getAttribute('data-keyword') || tag.textContent.trim();
+        openKeywordView(keyword);
+      });
+    }
   });
 }
 
 // Open keyword detail view
-function openKeywordView(keyword) {
+async function openKeywordView(keyword) {
   console.log('🔍 Opening keyword view for:', keyword);
   
   if (!currentAnalysis || !currentAnalysis.unmatchedKeywords || currentAnalysis.unmatchedKeywords.length === 0) {
     console.warn('⚠️ No analysis data available, cannot open keyword view');
     return;
   }
-  
-  const suggestions = keywordSuggestions[keyword] || {
-    skill: `Add ${keyword} to your technical skills section`,
-    summary: `Consider mentioning ${keyword} in your professional summary`,
-    original: 'Your current resume text'
-  };
 
   // Populate all missing keywords in the MISSING KEYWORD section using helper function
   populateMissingKeywordsGrid(keyword);
 
-  // Update suggestions for the initial keyword
-  const skillSuggestionEl = document.getElementById('skill-suggestion');
-  const summarySuggestionEl = document.getElementById('summary-suggestion');
-  const originalTextEl = document.getElementById('original-text');
-  
-  if (skillSuggestionEl) skillSuggestionEl.textContent = suggestions.skill;
-  if (summarySuggestionEl) summarySuggestionEl.textContent = suggestions.summary;
-  if (originalTextEl) originalTextEl.textContent = suggestions.original;
-
-  // Show keyword view and update tab
+  // Show keyword view first
   console.log('📱 Showing keyword view');
   showView(keywordView);
+  
+  // Check if AI is configured
+  const isConfigured = await checkAIConfigured();
+  
+  if (isConfigured && currentResumeText && currentResumeText.trim() !== '') {
+    // Use AI to generate suggestions
+    const config = await getAIConfig();
+    const loadingIndicator = document.getElementById('ai-loading-indicator');
+    const suggestionsGrid = document.getElementById('suggestions-grid');
+    
+    // Show loading state
+    if (loadingIndicator) loadingIndicator.style.display = 'flex';
+    if (suggestionsGrid) suggestionsGrid.style.display = 'none';
+    
+    try {
+      console.log(`🤖 Generating AI suggestions using ${config.provider} (${config.model})...`);
+      const aiResponse = await generateAISuggestions(keyword, currentResumeText, config.provider, config.model, config.apiKey);
+      updateKeywordViewWithAI(keyword, aiResponse);
+    } catch (error) {
+      console.error('❌ AI suggestion generation failed:', error);
+      
+          // Hide loading and show grid
+          if (loadingIndicator) loadingIndicator.style.display = 'none';
+          if (suggestionsGrid) suggestionsGrid.style.display = 'flex';
+      
+      // Fallback to hardcoded suggestions
+      const suggestions = keywordSuggestions[keyword] || {
+        skill: `Add ${keyword} to your technical skills section`,
+        summary: `Consider mentioning ${keyword} in your professional summary`,
+        original: 'Your current resume text'
+      };
+      
+      const skillSuggestionEl = document.getElementById('skill-suggestion');
+      const summarySuggestionEl = document.getElementById('summary-suggestion');
+      const originalTextEl = document.getElementById('original-text');
+      
+      if (skillSuggestionEl) skillSuggestionEl.textContent = suggestions.skill;
+      if (summarySuggestionEl) summarySuggestionEl.textContent = suggestions.summary;
+      if (originalTextEl) originalTextEl.textContent = suggestions.original;
+      
+      // Show error message to user
+      alert(`AI suggestion failed: ${error.message}. Using fallback suggestions.`);
+    }
+  } else {
+    // No AI configured or no resume - use hardcoded suggestions
+    if (!isConfigured) {
+      console.log('⚠️ AI not configured, using hardcoded suggestions');
+      // Optionally navigate to settings
+      // openSettingsView();
+    }
+    
+    const suggestions = keywordSuggestions[keyword] || {
+      skill: `Add ${keyword} to your technical skills section`,
+      summary: `Consider mentioning ${keyword} in your professional summary`,
+      original: 'Your current resume text'
+    };
+
+    const skillSuggestionEl = document.getElementById('skill-suggestion');
+    const summarySuggestionEl = document.getElementById('summary-suggestion');
+    const originalTextEl = document.getElementById('original-text');
+    
+    if (skillSuggestionEl) skillSuggestionEl.textContent = suggestions.skill;
+    if (summarySuggestionEl) summarySuggestionEl.textContent = suggestions.summary;
+    if (originalTextEl) originalTextEl.textContent = suggestions.original;
+  }
   
   console.log('✅ Keyword view opened for:', keyword);
 }
@@ -3220,6 +4123,80 @@ document.getElementById('edit-job-btn')?.addEventListener('click', () => {
 // Back button from job view
 document.getElementById('back-from-job')?.addEventListener('click', () => {
   showView(mainView);
+});
+
+// Settings view event handlers
+document.getElementById('settings-btn')?.addEventListener('click', () => {
+  openSettingsView();
+});
+
+document.getElementById('back-from-settings')?.addEventListener('click', () => {
+  // Return to previous view (main view for now)
+  showView(mainView);
+});
+
+// Provider selection change handler
+document.querySelectorAll('input[name="ai-provider"]').forEach(radio => {
+  radio.addEventListener('change', (e) => {
+    if (e.target.checked) {
+      updateProviderUI(e.target.value);
+      // Clear API key input when switching providers
+      const apiKeyInput = document.getElementById('api-key-input');
+      if (apiKeyInput) {
+        apiKeyInput.value = '';
+        apiKeyInput.dataset.actualKey = '';
+      }
+    }
+  });
+});
+
+// Save settings button
+document.getElementById('save-settings-btn')?.addEventListener('click', async () => {
+  await saveSettings();
+});
+
+// Clear settings button
+document.getElementById('clear-settings-btn')?.addEventListener('click', async () => {
+  if (confirm('Are you sure you want to clear your API key?')) {
+    await saveAIConfig(null, null, null);
+    const apiKeyInput = document.getElementById('api-key-input');
+    if (apiKeyInput) {
+      apiKeyInput.value = '';
+      apiKeyInput.dataset.actualKey = '';
+    }
+    updateSettingsStatus(null, null);
+    alert('API key cleared');
+  }
+});
+
+// Toggle API key visibility
+document.getElementById('toggle-api-key-visibility')?.addEventListener('click', () => {
+  const apiKeyInput = document.getElementById('api-key-input');
+  const toggleBtn = document.getElementById('toggle-api-key-visibility');
+  const visibilityIcon = document.getElementById('visibility-icon');
+  
+  if (apiKeyInput && toggleBtn) {
+    if (apiKeyInput.type === 'password') {
+      apiKeyInput.type = 'text';
+      // If showing masked value, restore actual key
+      if (apiKeyInput.value.startsWith('•')) {
+        const actualKey = apiKeyInput.dataset.actualKey;
+        if (actualKey) {
+          apiKeyInput.value = actualKey;
+        }
+      }
+      // Update icon to eye-slash
+      if (visibilityIcon) {
+        visibilityIcon.className = 'bi bi-eye-slash';
+      }
+    } else {
+      apiKeyInput.type = 'password';
+      // Update icon to eye
+      if (visibilityIcon) {
+        visibilityIcon.className = 'bi bi-eye';
+      }
+    }
+  }
 });
 
 // Read more/less button handler for job description
@@ -3389,8 +4366,8 @@ document.querySelectorAll('.copy-btn').forEach(btn => {
     const copyType = btn.getAttribute('data-copy');
     let textToCopy = '';
 
-    if (copyType === 'skill') {
-      textToCopy = document.getElementById('skill-suggestion').textContent;
+    if (copyType === 'bullet') {
+      textToCopy = document.getElementById('bullet-suggestion').textContent;
     } else if (copyType === 'summary') {
       textToCopy = document.getElementById('summary-suggestion').textContent;
     }
@@ -3399,22 +4376,25 @@ document.querySelectorAll('.copy-btn').forEach(btn => {
       await navigator.clipboard.writeText(textToCopy);
       
       // Update button to show "Copied" state
-      const copyIcon = btn.querySelector('.copy-icon');
+      const copyIcon = btn.querySelector('i.bi-clipboard');
       const copyText = btn.querySelector('.copy-text');
       
-      // Store original SVG
-      const originalSVG = copyIcon.outerHTML;
+      // Store original classes
+      const originalClasses = copyIcon ? copyIcon.className : '';
       const originalText = copyText.textContent;
       
       // Replace icon with checkmark
-      copyIcon.outerHTML = '<svg class="copy-icon" width="14" height="14" viewBox="0 0 14 14" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M11.6667 3.5L5.25 10L2.33333 7" stroke="#1447E6" stroke-width="1.45833" stroke-linecap="round" stroke-linejoin="round"/></svg>';
+      if (copyIcon) {
+        copyIcon.className = 'bi bi-check-lg';
+        copyIcon.style.fontSize = '14px';
+        copyIcon.style.color = '#1447E6';
+      }
       copyText.textContent = 'Copied';
       
       // Reset after 2 seconds
       setTimeout(() => {
-        const newIcon = btn.querySelector('.copy-icon');
-        if (newIcon) {
-          newIcon.outerHTML = originalSVG;
+        if (copyIcon) {
+          copyIcon.className = originalClasses;
         }
         copyText.textContent = originalText;
       }, 2000);
@@ -3512,12 +4492,187 @@ window.addEventListener('DOMContentLoaded', async () => {
   // Attach keyword handlers
   attachKeywordHandlers();
   
+  // Ensure all button event listeners are attached
+  ensureEventListeners();
+  
+  // Initialize collapsible sections
+  initializeCollapsibleSections();
+  
   console.log('=== Initialization Complete ===');
 });
+
+// Initialize collapsible sections
+function initializeCollapsibleSections() {
+  // Missing Keywords section
+  const missingKeywordsHeader = document.getElementById('missing-keywords-header');
+  const missingKeywordsSection = missingKeywordsHeader?.closest('.collapsible-section');
+  const missingKeywordsToggle = missingKeywordsHeader?.querySelector('.collapse-toggle');
+  if (missingKeywordsToggle && missingKeywordsSection && !missingKeywordsToggle.hasAttribute('data-listener-attached')) {
+    missingKeywordsToggle.setAttribute('data-listener-attached', 'true');
+    missingKeywordsToggle.addEventListener('click', (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      missingKeywordsSection.classList.toggle('collapsed');
+    });
+  }
+  
+  // Detected Keywords section
+  const detectedKeywordsHeader = document.getElementById('detected-keywords-header');
+  const detectedKeywordsSection = detectedKeywordsHeader?.closest('.collapsible-section');
+  const detectedKeywordsToggle = detectedKeywordsHeader?.querySelector('.collapse-toggle');
+  if (detectedKeywordsToggle && detectedKeywordsSection && !detectedKeywordsToggle.hasAttribute('data-listener-attached')) {
+    detectedKeywordsToggle.setAttribute('data-listener-attached', 'true');
+    detectedKeywordsToggle.addEventListener('click', (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      detectedKeywordsSection.classList.toggle('collapsed');
+    });
+  }
+  
+  // AI Suggestion section (in keyword view)
+  const aiSuggestionHeader = document.getElementById('ai-suggestion-header');
+  const aiSuggestionSection = aiSuggestionHeader?.closest('.keyword-section');
+  const aiSuggestionToggle = aiSuggestionHeader?.querySelector('.collapse-toggle');
+  if (aiSuggestionToggle && aiSuggestionSection && !aiSuggestionToggle.hasAttribute('data-listener-attached')) {
+    aiSuggestionToggle.setAttribute('data-listener-attached', 'true');
+    aiSuggestionToggle.addEventListener('click', (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      aiSuggestionSection.classList.toggle('collapsed');
+    });
+  }
+}
+
+// Function to ensure all event listeners are properly attached
+function ensureEventListeners() {
+  // Close button
+  const closeBtn = document.getElementById('close-btn');
+  if (closeBtn && !closeBtn.hasAttribute('data-listener-attached')) {
+    closeBtn.setAttribute('data-listener-attached', 'true');
+    closeBtn.addEventListener('click', (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      if (chrome.sidePanel) {
+        chrome.sidePanel.setPanelBehavior({ openPanelOnActionClick: false });
+      }
+      window.close();
+    });
+  }
+  
+  // Settings button
+  const settingsBtn = document.getElementById('settings-btn');
+  if (settingsBtn && !settingsBtn.hasAttribute('data-listener-attached')) {
+    settingsBtn.setAttribute('data-listener-attached', 'true');
+    settingsBtn.addEventListener('click', (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      openSettingsView();
+    });
+  }
+  
+  // Tab buttons
+  const tabAnalysis = document.getElementById('tab-analysis');
+  if (tabAnalysis && !tabAnalysis.hasAttribute('data-listener-attached')) {
+    tabAnalysis.setAttribute('data-listener-attached', 'true');
+    tabAnalysis.addEventListener('click', (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      switchTab('analysis');
+    });
+  }
+  
+  const tabRecommendations = document.getElementById('tab-recommendations');
+  if (tabRecommendations && !tabRecommendations.hasAttribute('data-listener-attached')) {
+    tabRecommendations.setAttribute('data-listener-attached', 'true');
+    tabRecommendations.addEventListener('click', (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      switchTab('recommendations');
+    });
+  }
+  
+  // Upload button
+  const uploadBtn = document.getElementById('upload-btn');
+  if (uploadBtn && !uploadBtn.hasAttribute('data-listener-attached')) {
+    uploadBtn.setAttribute('data-listener-attached', 'true');
+    uploadBtn.addEventListener('click', (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      const fileInput = document.getElementById('resume-upload');
+      if (fileInput) {
+        fileInput.click();
+      }
+    });
+  }
+  
+  // File input
+  const fileInput = document.getElementById('resume-upload');
+  if (fileInput && !fileInput.hasAttribute('data-listener-attached')) {
+    fileInput.setAttribute('data-listener-attached', 'true');
+    fileInput.addEventListener('change', async (e) => {
+      const file = e.target.files?.[0];
+      if (file) {
+        // Update UI to show the selected file name
+        document.getElementById('current-file').textContent = file.name;
+        console.log('Uploaded file:', file.name, 'Type:', file.type);
+        
+        try {
+          // Read file content based on type
+          let text = '';
+          if (file.type === 'application/pdf') {
+            // Use PDF.js to extract text
+            const arrayBuffer = await file.arrayBuffer();
+            const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
+            let fullText = '';
+            for (let i = 1; i <= pdf.numPages; i++) {
+              const page = await pdf.getPage(i);
+              const textContent = await page.getTextContent();
+              const pageText = textContent.items.map(item => item.str).join(' ');
+              fullText += pageText + '\n';
+            }
+            text = fullText;
+          } else if (file.type === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' || 
+                     file.type === 'application/msword') {
+            // Use Mammoth.js to extract text from DOCX
+            const arrayBuffer = await file.arrayBuffer();
+            const result = await mammoth.extractRawText({ arrayBuffer });
+            text = result.value;
+          } else {
+            // Try to read as plain text
+            text = await file.text();
+          }
+          
+          // Store in chrome.storage.local
+          currentResumeText = text;
+          await chrome.storage.local.set({
+            resumeText: text,
+            resumeFilename: file.name
+          });
+          
+          console.log('✓ Resume uploaded and saved:', file.name, '(' + text.length + ' characters)');
+          
+          // Re-run analysis with new resume
+          await performScan();
+        } catch (error) {
+          console.error('Error reading resume file:', error);
+          currentResumeText = '';
+          
+          // Show user-friendly error message
+          alert(error.message || 'Error reading resume file. Please try again.');
+          // Reset file input on error
+          e.target.value = '';
+          document.getElementById('current-file').textContent = 'No file selected';
+        }
+      }
+    });
+  }
+}
 
 // Re-attach handlers after UI updates
 const originalUpdateUI = updateUI;
 updateUI = function(analysis) {
   originalUpdateUI(analysis);
   attachKeywordHandlers();
+  // Re-initialize collapsible sections after UI updates
+  initializeCollapsibleSections();
 };
